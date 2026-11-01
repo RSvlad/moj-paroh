@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       manifest: {
         id: './',
-        name: 'Територије',
-        short_name: 'Територије',
+        name: 'Парохије',
+        short_name: 'Парохије',
         lang: 'sr',
         start_url: './',
         scope: './',
@@ -33,7 +33,7 @@ export default defineConfig({
         globIgnores: ['data/**'],
         runtimeCaching: [
           {
-            // data/<city>.json, data/cities.json, data/<city>.territories.geojson:
+            // data/<city>.json, data/cities.json, data/<city>.parishes.geojson:
             // online -> always the fresh file (stored for later); offline or slow -> the stored copy.
             urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/data\/[^/]+\.(json|geojson)$/.test(url.pathname),
             handler: 'NetworkFirst',

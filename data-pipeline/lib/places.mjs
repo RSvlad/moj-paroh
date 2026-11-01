@@ -1,4 +1,4 @@
-// Places (capitals and other points): pairs the Sheet's addresses with the geocode cache written by
+// Places (churches and other points): pairs the Sheet's addresses with the geocode cache written by
 // data-pipeline/geocode.py. Pure (apart from the file helpers), so it can be checked without network access.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { slug } from './build-city.mjs';
@@ -45,7 +45,7 @@ export function attachCoordinates(data, cache) {
 export function writePlacesInput(data, dir = WORK_DIR) {
   const out = `${dir}/${data.city}/places-input.json`;
   mkdirSync(`${dir}/${data.city}`, { recursive: true });
-  const places = data.places.map(({ id, name, kind, territoryId, address }) => ({ id, name, kind, territoryId, address }));
+  const places = data.places.map(({ id, name, kind, parishId, address }) => ({ id, name, kind, parishId, address }));
   writeFileSync(out, JSON.stringify({ city: data.city, places }, null, 2) + '\n');
   return out;
 }

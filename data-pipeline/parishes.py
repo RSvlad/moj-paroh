@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Automatic territory drawing (issue #8).
+"""Automatic parish drawing (issue #8).
 
 Cuts the street network into blocks, treats the streets listed in the Sheet's "Обим" (scope) tab,
-railways, rivers/canals and the city boundary as barriers, and grows every territory from its
-capital across neighbouring blocks without crossing a barrier. A territory is the union of its blocks.
-Streets that lie inside a territory become "internal" and inherit its default assignee.
+railways, rivers/canals and the city boundary as barriers, and grows every parish from its
+church across neighbouring blocks without crossing a barrier. A parish is the union of its blocks.
+Streets that lie inside a parish become "internal" and inherit its default assignee.
 
-    python data-pipeline/territories.py --city novi-sad --refresh   # download the street network (OSM)
-    python data-pipeline/territories.py --city novi-sad             # draw
+    python data-pipeline/parishes.py --city novi-sad --refresh   # download the street network (OSM)
+    python data-pipeline/parishes.py --city novi-sad             # draw
 
-Input  data-pipeline/work/<city>/territories-input.json (git-ignored, written by the build):
-    {"territories": [{"id": "1", "capital": {"lat": 45.25, "lng": 19.84}}, ...],
-     "scope": [{"territory": "1", "street": "Футошка", "settlement": "",
+Input  data-pipeline/work/<city>/parishes-input.json (git-ignored, written by the build):
+    {"parishes": [{"id": "1", "church": {"lat": 45.25, "lng": 19.84}}, ...],
+     "scope": [{"parish": "1", "street": "Футошка", "settlement": "",
                 "from": "Јанка Веселиновића", "to": "Железничка"}, ...]}
   "from"/"to" are optional cross streets: only the part of the street between them is a barrier.
-  Give both or neither. A missing "capital" is reported, not guessed.
-  data-pipeline/work/<city>/overrides/<territory id>.geojson (from the Sheet's "Границе" tab) or
-  data-pipeline/overrides/<city>/<territory id>.geojson, when present, replaces the automatic border.
-Output data-pipeline/work/<city>/territories.json   internal streets and diagnostics (for report.py, #9)
-       public/data/<city>.territories.geojson       territory polygons (WGS84)
+  Give both or neither. A missing "church" is reported, not guessed.
+  data-pipeline/work/<city>/overrides/<parish id>.geojson (from the Sheet's "Границе" tab) or
+  data-pipeline/overrides/<city>/<parish id>.geojson, when present, replaces the automatic border.
+Output data-pipeline/work/<city>/parishes.json   internal streets and diagnostics (for report.py, #9)
+       public/data/<city>.parishes.geojson       parish polygons (WGS84)
 """
 from __future__ import annotations
 
@@ -49,13 +49,13 @@ PUBLIC_DIR = ROOT / "public" / "data"
 TOL_M = 0.5           # linework closer than this is the same line
 MIN_OPEN_M = 1.0      # two blocks are connected when this much of their shared edge is not a barrier
 MIN_BLOCK_M2 = 1.0    # smaller faces are slivers of the noding, not blocks
-SNAP_M = 25.0         # a capital this close to a block (e.g. on the street) still seeds it
+SNAP_M = 25.0         # a church this close to a block (e.g. on the street) still seeds it
 INNER_M = 2.0         # a street within this distance of a border is a border street, not an internal one
-INTERNAL_SHARE = 0.9  # a street is internal when this much of its length is inside one territory
-BORDER_MIN_M = 10.0   # a street runs along a territory's border when at least this much of it lies on it
-# Drawing from the streets alone (no capitals, no "Обим"):
+INTERNAL_SHARE = 0.9  # a street is internal when this much of its length is inside one parish
+BORDER_MIN_M = 10.0   # a street runs along a parish's border when at least this much of it lies on it
+# Drawing from the streets alone (no churches, no "Обим"):
 VOTE_BUFFER_M = 1.5   # a block edge this close to a rule's street counts as lying on it
-TIE_M = 1.0           # two territories whose shares differ by less than this decide nothing
+TIE_M = 1.0           # two parishes whose shares differ by less than this decide nothing
 FILL_ROUNDS = 3       # how many blocks deep unlisted streets are filled in from the labelled ones
 MAX_BLOCK_M2 = 1_500_000  # larger faces (forest, fields) are not a neighbourhood and are never labelled
 
@@ -190,7 +190,7 @@ def open_edges(blocks: list, barriers: list) -> dict[int, dict[int, float]]:
 
 
 def votes_from_streets(blocks: list, tree: STRtree, claims: list) -> dict[int, dict[str, float]]:
-    """claims: [(territory id, street geometry)] -> per block, metres of its edge lying on each territory's streets."""
+    """claims: [(parish id, street geometry)] -> per block, metres of its edge lying on each parish's streets."""
     votes: dict[int, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     for tid, line in claims:
         zone = line.buffer(VOTE_BUFFER_M)
@@ -202,10 +202,10 @@ def votes_from_streets(blocks: list, tree: STRtree, claims: list) -> dict[int, d
 
 
 def label_blocks(blocks: list, edges: dict, votes: dict, claimed: set) -> tuple[dict[int, str], int]:
-    """Block -> territory, from the streets alone. -> (labels, number of blocks left undecided by a tie).
+    """Block -> parish, from the streets alone. -> (labels, number of blocks left undecided by a tie).
 
-    1. A block belongs to the territory whose streets make up most of its edge (a tie decides nothing).
-    2. The blocks around a few labelled ones (streets not listed in any rule) take the territory they
+    1. A block belongs to the parish whose streets make up most of its edge (a tie decides nothing).
+    2. The blocks around a few labelled ones (streets not listed in any rule) take the parish they
        share most edge with, for at most FILL_ROUNDS rounds, so an unlisted enclave is filled but the
        outskirts are not painted over. Blocks larger than MAX_BLOCK_M2 (forest, fields) never get one.
     """
@@ -262,18 +262,18 @@ def flood(graph: dict[int, set[int]], start: int, blocked: set[int]) -> set[int]
 
 @dataclass
 class Drawing:
-    polygons: dict = field(default_factory=dict)    # territory id -> geometry
-    sources: dict = field(default_factory=dict)     # territory id -> "auto" | "override"
-    blocks_of: dict = field(default_factory=dict)   # territory id -> sorted block indices
-    seeds: dict = field(default_factory=dict)       # territory id -> {"block": int|None, "distance": float}
-    conflicts: list = field(default_factory=list)   # [{"blocks": [...], "territories": [...], "areaM2": float}]
-    unassigned: list = field(default_factory=list)  # block indices outside every territory
+    polygons: dict = field(default_factory=dict)    # parish id -> geometry
+    sources: dict = field(default_factory=dict)     # parish id -> "auto" | "override"
+    blocks_of: dict = field(default_factory=dict)   # parish id -> sorted block indices
+    seeds: dict = field(default_factory=dict)       # parish id -> {"block": int|None, "distance": float}
+    conflicts: list = field(default_factory=list)   # [{"blocks": [...], "parishes": [...], "areaM2": float}]
+    unassigned: list = field(default_factory=list)  # block indices outside every parish
 
 
 def draw(blocks: list, graph: dict, seeds: dict, overrides: dict) -> Drawing:
-    """seeds: territory id -> Point | None; overrides: territory id -> polygonal geometry.
+    """seeds: parish id -> Point | None; overrides: parish id -> polygonal geometry.
 
-    Every territory is flooded on its own, so a block reached by two territories shows up as a
+    Every parish is flooded on its own, so a block reached by two parishes shows up as a
     conflict (an open border) instead of silently going to whoever got there first. Blocks claimed
     by an override are walls for everyone else's flood.
     """
@@ -307,7 +307,7 @@ def draw(blocks: list, graph: dict, seeds: dict, overrides: dict) -> Drawing:
     for i, tids in sorted(owners.items()):
         if len(tids) > 1:
             area = unary_union([blocks[i]]).area
-            out.conflicts.append({"blocks": [i], "territories": sorted(tids), "areaM2": round(area)})
+            out.conflicts.append({"blocks": [i], "parishes": sorted(tids), "areaM2": round(area)})
         else:
             mine[tids[0]].append(i)
     out.conflicts = _merge_conflicts(out.conflicts)
@@ -323,11 +323,11 @@ def draw(blocks: list, graph: dict, seeds: dict, overrides: dict) -> Drawing:
 
 
 def draw_from_streets(blocks: list, streets: list, walls: list, rules: list, seeds: dict, overrides: dict):
-    """Territories from the Sheet's street rules alone. -> (Drawing, unmatched street labels, tied blocks).
+    """Parishes from the Sheet's street rules alone. -> (Drawing, unmatched street labels, tied blocks).
 
-    rules: [{"street", "settlement", "territories": [ids]}], one per street that has rules. A street whose
-    rules all point to one territory is that territory's; a street split between territories (odd/even
-    sides, number ranges) is a border street and claims nothing. A block goes to the territory owning most
+    rules: [{"street", "settlement", "parishes": [ids]}], one per street that has rules. A street whose
+    rules all point to one parish is that parish's; a street split between parishes (odd/even
+    sides, number ranges) is a border street and claims nothing. A block goes to the parish owning most
     of its edge (see label_blocks). Rail, water and the city boundary stay walls for the gap filling.
     """
     claims, unmatched = [], []
@@ -338,7 +338,7 @@ def draw_from_streets(blocks: list, streets: list, walls: list, rules: list, see
         if not lines:
             unmatched.append(name + (f" ({settlement})" if settlement else ""))
             continue
-        owners = {str(t) for t in row["territories"]}
+        owners = {str(t) for t in row["parishes"]}
         if len(owners) == 1:
             claims.append((next(iter(owners)), unary_union(lines)))
 
@@ -371,18 +371,18 @@ def draw_from_streets(blocks: list, streets: list, walls: list, rules: list, see
 
 
 def _merge_conflicts(items: list) -> list:
-    """One entry per contested set of territories, listing all its blocks."""
+    """One entry per contested set of parishes, listing all its blocks."""
     grouped: dict[tuple, dict] = {}
     for c in items:
-        key = tuple(c["territories"])
-        g = grouped.setdefault(key, {"blocks": [], "territories": c["territories"], "areaM2": 0})
+        key = tuple(c["parishes"])
+        g = grouped.setdefault(key, {"blocks": [], "parishes": c["parishes"], "areaM2": 0})
         g["blocks"] += c["blocks"]
         g["areaM2"] += c["areaM2"]
     return list(grouped.values())
 
 
 def find_internal(streets: list, polygons: dict) -> list:
-    """Streets lying (almost) entirely inside one territory, away from its border."""
+    """Streets lying (almost) entirely inside one parish, away from its border."""
     inner = {tid: poly.buffer(-INNER_M) for tid, poly in polygons.items()}
     inner = {tid: g for tid, g in inner.items() if not g.is_empty}
     groups: dict[tuple, list] = defaultdict(list)
@@ -397,14 +397,14 @@ def find_internal(streets: list, polygons: dict) -> list:
         for tid, area in inner.items():
             if area.intersection(line).length / line.length >= INTERNAL_SHARE:
                 found.append({"name": members[0]["name"], "settlement": members[0]["settlement"],
-                              "territory": tid})
+                              "parish": tid})
                 break
-    found.sort(key=lambda f: (f["territory"], f["name"], f["settlement"]))
+    found.sort(key=lambda f: (f["parish"], f["name"], f["settlement"]))
     return found
 
 
 def find_border(streets: list, polygons: dict) -> list:
-    """Streets running along the border between two or more territories.
+    """Streets running along the border between two or more parishes.
 
     Such a street needs rules for both sides (odd and even numbers), see report.py (#9).
     """
@@ -422,7 +422,7 @@ def find_border(streets: list, polygons: dict) -> list:
                          if edge.intersection(line).length >= BORDER_MIN_M)
         if len(touched) > 1:
             found.append({"name": members[0]["name"], "settlement": members[0]["settlement"],
-                          "territories": touched})
+                          "parishes": touched})
     found.sort(key=lambda f: (f["name"], f["settlement"]))
     return found
 
@@ -457,7 +457,7 @@ def fetch_network(city: dict) -> dict:
 
     def lines(tags: dict):
         # Only "nothing matches" means none; a server error must abort, or the cache would
-        # silently lack barriers and territories would leak.
+        # silently lack barriers and parishes would leak.
         try:
             gdf = ox.features_from_polygon(area, tags=tags)
         except InsufficientResponseError:
@@ -524,32 +524,32 @@ def read_json(path: Path, what: str):
 
 
 def load_input(path: Path) -> tuple[list, list, list | None]:
-    """-> (territories, scope, rules). `rules` is None unless the input asks to draw from the streets alone."""
+    """-> (parishes, scope, rules). `rules` is None unless the input asks to draw from the streets alone."""
     data = read_json(path, "улаз")
-    territories, scope, rules = data.get("territories"), data.get("scope", []), data.get("rules")
-    if not isinstance(territories, list) or not territories:
-        raise ValueError(f"{path.name}: „territories“ мора бити непразна листа")
+    parishes, scope, rules = data.get("parishes"), data.get("scope", []), data.get("rules")
+    if not isinstance(parishes, list) or not parishes:
+        raise ValueError(f"{path.name}: „parishes“ мора бити непразна листа")
     if not isinstance(scope, list):
         raise ValueError(f"{path.name}: „scope“ мора бити листа")
     if rules is not None and not isinstance(rules, list):
         raise ValueError(f"{path.name}: „rules“ мора бити листа")
     seen = set()
-    for t in territories:
+    for t in parishes:
         tid = str(t.get("id", "")).strip() if isinstance(t, dict) else ""
         if not tid or tid in seen:
-            raise ValueError(f"{path.name}: територија без ида или са поновљеним идом „{tid}“")
+            raise ValueError(f"{path.name}: парохија без ида или са поновљеним идом „{tid}“")
         seen.add(tid)
-        cap = t.get("capital")
+        cap = t.get("church")
         if cap is not None and not (isinstance(cap, dict) and {"lat", "lng"} <= cap.keys()):
-            raise ValueError(f"{path.name}: престоница територије „{tid}“ мора имати lat и lng")
+            raise ValueError(f"{path.name}: парохијски храм парохије „{tid}“ мора имати lat и lng")
     for row in scope:
-        if not isinstance(row, dict) or str(row.get("territory", "")) not in seen:
-            raise ValueError(f"{path.name}: ред Обима упућује на непознату територију: {row}")
+        if not isinstance(row, dict) or str(row.get("parish", "")) not in seen:
+            raise ValueError(f"{path.name}: ред Обима упућује на непознату парохију: {row}")
     for row in rules or []:
-        ids = row.get("territories") if isinstance(row, dict) else None
+        ids = row.get("parishes") if isinstance(row, dict) else None
         if not isinstance(ids, list) or not ids or not {str(i) for i in ids} <= seen:
-            raise ValueError(f"{path.name}: правило упућује на непознату територију: {row}")
-    return territories, scope, rules
+            raise ValueError(f"{path.name}: правило упућује на непознату парохију: {row}")
+    return parishes, scope, rules
 
 
 def load_override(path: Path):
@@ -600,7 +600,7 @@ def run(city_id: str, input_path: Path, out_dir: Path) -> int:
     walls = [g for k, g in zip(frame["kind"], frame.geometry) if k in ("railway", "waterway", "boundary")]
     boundary = unary_union([g for k, g in zip(frame["kind"], frame.geometry) if k == "boundary"])
 
-    territories, scope, rules = load_input(input_path)
+    parishes, scope, rules = load_input(input_path)
     from_streets = rules is not None
     scope_barriers, problems = ([], []) if from_streets else match_scope(streets, scope)
     if problems:
@@ -608,8 +608,8 @@ def run(city_id: str, input_path: Path, out_dir: Path) -> int:
         return 1
 
     seeds = {}
-    for t in territories:
-        cap = t.get("capital")
+    for t in parishes:
+        cap = t.get("church")
         seeds[str(t["id"])] = None if cap is None or from_streets else gpd.GeoSeries(
             [Point(float(cap["lng"]), float(cap["lat"]))], crs="EPSG:4326").to_crs(metric).iloc[0]
 
@@ -645,15 +645,15 @@ def run(city_id: str, input_path: Path, out_dir: Path) -> int:
             "areaM2": round(poly.area) if poly is not None else 0,
             "touchesCityBoundary": touches,
             "boundaryContact": lnglat(poly.intersection(edge), metric) if touches else None,
-            "capital": drawing.seeds.get(tid),
-            "hasCapital": seeds[tid] is not None,
-            "capitalInsidePolygon": None if seeds[tid] is None or poly is None
+            "church": drawing.seeds.get(tid),
+            "hasChurch": seeds[tid] is not None,
+            "churchInsidePolygon": None if seeds[tid] is None or poly is None
             else bool(poly.buffer(TOL_M).contains(seeds[tid])),
         }
     report = {
         "city": city_id,
         "generated": date.today().isoformat(),
-        "territories": stats,
+        "parishes": stats,
         "conflicts": drawing.conflicts,
         "unassigned": {"blocks": len(drawing.unassigned),
                        "areaM2": round(sum(blocks[i].area for i in drawing.unassigned))},
@@ -663,36 +663,36 @@ def run(city_id: str, input_path: Path, out_dir: Path) -> int:
 
     work = WORK_DIR / city_id
     work.mkdir(parents=True, exist_ok=True)
-    (work / "territories.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+    (work / "parishes.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n",
                                            encoding="utf-8")
     out_dir.mkdir(parents=True, exist_ok=True)
     features = [{"type": "Feature", "properties": {"id": tid, "source": drawing.sources[tid]},
                  "geometry": to_wgs84_json(poly, metric)} for tid, poly in drawing.polygons.items()]
-    (out_dir / f"{city_id}.territories.geojson").write_text(
+    (out_dir / f"{city_id}.parishes.geojson").write_text(
         json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False) + "\n",
         encoding="utf-8")
 
-    print(f"✔ {city_id}: територија {len(drawing.polygons)}/{len(seeds)}, блокова {len(blocks)}, "
+    print(f"✔ {city_id}: парохија {len(drawing.polygons)}/{len(seeds)}, блокова {len(blocks)}, "
           f"унутрашњих улица {len(internal)}")
     for tid, s in stats.items():
         note = ""
         if s["source"] == "auto" and seeds[tid] is None:
-            note = "  ! нема престонице"
-        elif s["source"] == "auto" and s["capital"]["block"] is None:
-            note = "  ! престоница није близу ниједног блока"
+            note = "  ! нема парохијског храма"
+        elif s["source"] == "auto" and s["church"]["block"] is None:
+            note = "  ! парохијски храм није близу ниједног блока"
         elif s["touchesCityBoundary"] and s["source"] != "streets":
             note = "  ! додирује границу града (обим можда није затворен)"
         print(f"  {tid}: {s['source']}, блокова {s['blocks']}, {s['areaM2']} m²{note}")
     for c in drawing.conflicts:
-        print(f"  ! блокови које деле територије {', '.join(c['territories'])}: {len(c['blocks'])}")
+        print(f"  ! блокови које деле парохије {', '.join(c['parishes'])}: {len(c['blocks'])}")
     if drawing.unassigned:
-        print(f"  ! блокова без територије: {report['unassigned']['blocks']}")
+        print(f"  ! блокова без парохије: {report['unassigned']['blocks']}")
     if from_streets:
         empty = [tid for tid in seeds if tid not in drawing.polygons]
         if empty:
-            print(f"  ! територије без иједног блока (нема им додељених улица у OSM мрежи): {', '.join(empty)}")
+            print(f"  ! парохије без иједног блока (нема им додељених улица у OSM мрежи): {', '.join(empty)}")
         if ties:
-            print(f"  ! блокова између две територије без премоћи: {ties}")
+            print(f"  ! блокова између две парохије без премоћи: {ties}")
         if unmatched:
             print("  ! улице из Правила којих нема у OSM мрежи (проверите писање):\n"
                   + "\n".join(f"      • {name}" for name in unmatched))
@@ -700,12 +700,12 @@ def run(city_id: str, input_path: Path, out_dir: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Аутоматско исцртавање територија (#8).")
+    parser = argparse.ArgumentParser(description="Аутоматско исцртавање парохија (#8).")
     parser.add_argument("--city", required=True, metavar="ИД", help="ид града из cities.yml")
     parser.add_argument("--refresh", action="store_true",
                         help="поново преузми уличну мрежу из OSM-а (иначе се користи кеш)")
-    parser.add_argument("--input", type=Path, help="подразумевано work/<град>/territories-input.json")
-    parser.add_argument("--out", type=Path, default=PUBLIC_DIR, help="фасцикла за <град>.territories.geojson")
+    parser.add_argument("--input", type=Path, help="подразумевано work/<град>/parishes-input.json")
+    parser.add_argument("--out", type=Path, default=PUBLIC_DIR, help="фасцикла за <град>.parishes.geojson")
     args = parser.parse_args(argv)
 
     try:
@@ -730,7 +730,7 @@ def main(argv: list[str] | None = None) -> int:
         if not network_path(args.city).exists():
             print(f"✖ {args.city}: нема мреже; покрените са --refresh", file=sys.stderr)
             return 2
-        input_path = args.input or WORK_DIR / args.city / "territories-input.json"
+        input_path = args.input or WORK_DIR / args.city / "parishes-input.json"
         if args.refresh and not input_path.exists():
             return 0  # refreshing the cache needs no input
         return run(args.city, input_path, args.out)

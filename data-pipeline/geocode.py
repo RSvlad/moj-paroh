@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Geocoding of places (issue #10): capitals and other points from the Sheet's "Тачке" tab.
+"""Geocoding of places (issue #10): churches and other points from the Sheet's "Тачке" tab.
 
 For every address it looks for an OSM address point (addr:street + addr:housenumber inside the city),
 and only if there is none asks Nominatim (at most one request per second, as its usage policy requires).
@@ -32,7 +32,7 @@ from datetime import date
 from pathlib import Path
 
 from streets import CACHE_DIR, clean, load_cities, show
-from territories import WORK_DIR, slug
+from parishes import WORK_DIR, slug
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 USER_AGENT = "moj-paroh-data-pipeline (https://github.com/RSvlad/moj-paroh)"

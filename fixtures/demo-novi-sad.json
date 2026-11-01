@@ -2,7 +2,7 @@
   "city": "novi-sad",
   "name": "Нови Сад",
   "updated": "2026-10-30",
-  "territories": [
+  "parishes": [
     { "id": "14", "name": "Либерти", "color": "#d9692b", "defaults": { "primary": "Петар П.", "deputy": "Мира М." } },
     { "id": "15", "name": "Лиман", "color": "#2b7bd9", "defaults": { "primary": "Јован Ј." } }
   ],
@@ -16,20 +16,20 @@
     { "id": "nedodeljena", "name": "Дунавска", "settlement": "Нови Сад" }
   ],
   "rules": [
-    { "streetId": "futoska", "from": null, "to": 15, "parity": "all", "territoryId": "14", "assignee": "Петар П." },
-    { "streetId": "futoska", "from": 15, "to": null, "parity": "odd", "territoryId": "14", "assignee": "Мира М." },
-    { "streetId": "futoska", "from": 16, "to": null, "parity": "even", "territoryId": "15" }
+    { "streetId": "futoska", "from": null, "to": 15, "parity": "all", "parishId": "14", "assignee": "Петар П." },
+    { "streetId": "futoska", "from": 15, "to": null, "parity": "odd", "parishId": "14", "assignee": "Мира М." },
+    { "streetId": "futoska", "from": 16, "to": null, "parity": "even", "parishId": "15" }
   ],
   "internal": [
-    { "streetId": "jevrejska", "territoryId": "14" },
-    { "streetId": "zeleznicka", "territoryId": "15" },
-    { "streetId": "skolska-ns", "territoryId": "14" },
-    { "streetId": "skolska-pv", "territoryId": "15" },
-    { "streetId": "djure-jaksica", "territoryId": "15" }
+    { "streetId": "jevrejska", "parishId": "14" },
+    { "streetId": "zeleznicka", "parishId": "15" },
+    { "streetId": "skolska-ns", "parishId": "14" },
+    { "streetId": "skolska-pv", "parishId": "15" },
+    { "streetId": "djure-jaksica", "parishId": "15" }
   ],
   "places": [
-    { "id": "demo-dvorana-liberti", "name": "Демо сала Либерти", "kind": "capital", "territoryId": "14", "address": "Футошка 1, Нови Сад", "lat": 45.2556, "lng": 19.8302 },
-    { "id": "demo-dvorana-liman", "name": "Демо сала Лиман", "kind": "capital", "territoryId": "15", "address": "Железничка 5, Нови Сад" },
-    { "id": "demo-sabirna-tacka", "name": "Демо сабирна тачка", "kind": "collector", "territoryId": "14", "address": "Јеврејска 3, Нови Сад", "lat": 45.2561, "lng": 19.8449, "note": "Недељом у 9:30" }
+    { "id": "demo-dvorana-liberti", "name": "Демо сала Либерти", "kind": "church", "parishId": "14", "address": "Футошка 1, Нови Сад", "lat": 45.2556, "lng": 19.8302 },
+    { "id": "demo-dvorana-liman", "name": "Демо сала Лиман", "kind": "church", "parishId": "15", "address": "Железничка 5, Нови Сад" },
+    { "id": "demo-sabirna-tacka", "name": "Демо сабирна тачка", "kind": "collector", "parishId": "14", "address": "Јеврејска 3, Нови Сад", "lat": 45.2561, "lng": 19.8449, "note": "Недељом у 9:30" }
   ]
 }

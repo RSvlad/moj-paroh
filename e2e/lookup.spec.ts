@@ -20,25 +20,25 @@ test.describe('претрага', () => {
   test('гранични број наводи оба задужења и упозорава', async ({ page }) => {
     const card = await lookup(page, 'Футошка', '15');
     await expect(card).toContainText('граничан');
-    await expect(card.getByRole('heading', { level: 2, name: /Територија 14/ })).toBeVisible();
+    await expect(card.getByRole('heading', { level: 2, name: /Парохија 14/ })).toBeVisible();
   });
 
   test('број који није гранични нема упозорење', async ({ page }) => {
     const card = await lookup(page, 'Футошка', '16');
-    await expect(card).toContainText('Територија 15');
+    await expect(card).toContainText('Парохија 15');
     await expect(card).not.toContainText('граничан');
   });
 
   test('„линијар“: улица без броја приказује све делове', async ({ page }) => {
     const card = await lookup(page, 'Футошка');
     await expect(card).toContainText('Улица је подељена по бројевима');
-    await expect(card).toContainText('Територија 14');
-    await expect(card).toContainText('Територија 15');
+    await expect(card).toContainText('Парохија 14');
+    await expect(card).toContainText('Парохија 15');
   });
 
-  test('улица која није подељена даје своју територију', async ({ page }) => {
+  test('улица која није подељена даје своју парохију', async ({ page }) => {
     const card = await lookup(page, 'Железничка');
-    await expect(card).toContainText('Територија 15');
+    await expect(card).toContainText('Парохија 15');
     await expect(card).not.toContainText('подељена');
   });
 

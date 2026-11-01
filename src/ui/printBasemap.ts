@@ -1,11 +1,11 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { polygonsOf } from '../geo/geo';
 import type { Geometry } from '../geo/geo';
-import { projectTerritory } from '../geo/svgMap';
+import { projectParish } from '../geo/svgMap';
 import type { SvgMap } from '../geo/svgMap';
 import { STYLE_URL } from './mapStyle';
 
-/** A basemap picture and the territory drawn in the very same frame, so the two line up exactly. */
+/** A basemap picture and the parish drawn in the very same frame, so the two line up exactly. */
 export interface Basemap {
   image: string;
   drawing: SvgMap;
@@ -14,15 +14,15 @@ export interface Basemap {
 const TIMEOUT_MS = 10_000;
 
 /**
- * Renders the basemap under one territory into a width x height picture, for printing: MapLibre draws into an
- * off-screen element, is framed on the territory (and its capital), and its canvas is copied out as a JPEG.
- * The border and the capital are projected by the map itself, so they cannot drift from the picture.
+ * Renders the basemap under one parish into a width x height picture, for printing: MapLibre draws into an
+ * off-screen element, is framed on the parish (and its church), and its canvas is copied out as a JPEG.
+ * The border and the church are projected by the map itself, so they cannot drift from the picture.
  * MapLibre is loaded on first use. Throws when the map cannot be drawn (no WebGL, style or tiles unreachable);
  * the caller then keeps the plain vector drawing.
  */
 export async function renderBasemap(
   geometries: readonly Geometry[],
-  capital: { lat: number; lng: number } | undefined,
+  church: { lat: number; lng: number } | undefined,
   width: number,
   height: number,
   pad: number,
@@ -33,7 +33,7 @@ export async function renderBasemap(
     south = Math.min(south, lat); north = Math.max(north, lat);
   };
   for (const g of geometries) for (const poly of polygonsOf(g)) for (const ring of poly) for (const [lng, lat] of ring) take(lng!, lat!);
-  if (capital) take(capital.lng, capital.lat);
+  if (church) take(church.lng, church.lat);
   if (!Number.isFinite(west)) return null;
 
   const [maplibregl, worker] = await Promise.all([
@@ -66,7 +66,7 @@ export async function renderBasemap(
       m.once('idle', () => { clearTimeout(timer); resolve(); });
     });
 
-    const drawing = projectTerritory(geometries, capital, width, height, pad, (lng, lat) => {
+    const drawing = projectParish(geometries, church, width, height, pad, (lng, lat) => {
       const p = m.project([lng, lat]);
       return { x: p.x, y: p.y };
     });

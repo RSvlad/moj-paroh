@@ -2,10 +2,10 @@ import { polygonsOf } from './geo';
 import type { Geometry } from './geo';
 
 export interface SvgMap {
-  /** SVG path data of all rings of the territory (draw with fill-rule="evenodd" so holes stay empty). */
+  /** SVG path data of all rings of the parish (draw with fill-rule="evenodd" so holes stay empty). */
   d: string;
-  /** The capital in the same drawing; null when it has no coordinates. */
-  capital: { x: number; y: number } | null;
+  /** The church in the same drawing; null when it has no coordinates. */
+  church: { x: number; y: number } | null;
 }
 
 const round = (n: number): number => Math.round(n * 10) / 10;
@@ -14,14 +14,14 @@ const round = (n: number): number => Math.round(n * 10) / 10;
 export type Project = (lng: number, lat: number) => { x: number; y: number };
 
 /**
- * Projects a territory (all its polygons) and its capital into a width x height drawing, scaled to fit with `pad` on
+ * Projects a parish (all its polygons) and its church into a width x height drawing, scaled to fit with `pad` on
  * every side. Equirectangular, with longitude shortened by cos(latitude), which is exact enough for a city.
- * The capital is part of the frame, so it is visible even when it lies outside the polygons. Null: nothing to draw.
+ * The church is part of the frame, so it is visible even when it lies outside the polygons. Null: nothing to draw.
  * With `project` the drawing is placed by it instead (to line up with a basemap rendered in the same frame).
  */
-export function projectTerritory(
+export function projectParish(
   geometries: readonly Geometry[],
-  capital: { lat: number; lng: number } | undefined,
+  church: { lat: number; lng: number } | undefined,
   width: number,
   height: number,
   pad: number,
@@ -39,7 +39,7 @@ export function projectTerritory(
     };
   } else {
     const all: number[][] = rings.flat();
-    if (capital) all.push([capital.lng, capital.lat]);
+    if (church) all.push([church.lng, church.lat]);
     let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
     for (const [lng, lat] of all) {
       minLat = Math.min(minLat, lat!); maxLat = Math.max(maxLat, lat!);
@@ -56,7 +56,7 @@ export function projectTerritory(
   const d = rings
     .map((ring) => `M${ring.map(([lng, lat]) => { const p = at(lng!, lat!); return `${p.x} ${p.y}`; }).join('L')}Z`)
     .join('');
-  return { d, capital: capital ? at(capital.lng, capital.lat) : null };
+  return { d, church: church ? at(church.lng, church.lat) : null };
 }
 
 /** Five-pointed star centred on (cx, cy), as SVG points. */

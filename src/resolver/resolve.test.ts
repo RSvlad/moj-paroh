@@ -49,18 +49,18 @@ describe('resolve: rules', () => {
     expect(people(r)).toEqual(['Петар П.']);
   });
 
-  it('open end ("крај") and parity: odd above 15 → Мира, even above 15 → territory default', () => {
+  it('open end ("крај") and parity: odd above 15 → Мира, even above 15 → parish default', () => {
     expect(people(resolver.resolve('futoska', h('21')))).toEqual(['Мира М.']);
     const even = resolver.resolve('futoska', h('20'));
-    expect(even.kind === 'rules' && even.assignments[0]?.territory.id).toBe('15');
-    expect(people(even)).toEqual(['Јован Ј.']); // no rule assignee → territory default
+    expect(even.kind === 'rules' && even.assignments[0]?.parish.id).toBe('15');
+    expect(people(even)).toEqual(['Јован Ј.']); // no rule assignee → parish default
   });
 
   it('even number not covered by any rule falls through to unassigned', () => {
     // 14 is even, ≤15: covered by "до 15"; 16 even covered by third rule. Use a street with rules only for odd.
     const custom = createResolver({
       ...data,
-      rules: [{ streetId: 'futoska', from: 1, to: null, parity: 'odd', territoryId: '14' }],
+      rules: [{ streetId: 'futoska', from: 1, to: null, parity: 'odd', parishId: '14' }],
     });
     expect(custom.resolve('futoska', h('4')).kind).toBe('unassigned');
   });
@@ -78,12 +78,12 @@ describe('resolve: linear, inherited, unassigned', () => {
     ]);
   });
 
-  it('internal street inherits the territory default, with or without number', () => {
+  it('internal street inherits the parish default, with or without number', () => {
     for (const house of [null, h('3')]) {
       const r = resolver.resolve('jevrejska', house);
       expect(r.kind).toBe('inherited');
       if (r.kind === 'inherited') {
-        expect(r.assignment.territory.id).toBe('14');
+        expect(r.assignment.parish.id).toBe('14');
         expect(r.assignment.people).toEqual({ primary: 'Петар П.', deputy: 'Мира М.' });
       }
     }
@@ -92,8 +92,8 @@ describe('resolve: linear, inherited, unassigned', () => {
   it('same name in two settlements resolves independently', () => {
     const a = resolver.resolve('skolska-ns', null);
     const b = resolver.resolve('skolska-pv', null);
-    expect(a.kind === 'inherited' && a.assignment.territory.id).toBe('14');
-    expect(b.kind === 'inherited' && b.assignment.territory.id).toBe('15');
+    expect(a.kind === 'inherited' && a.assignment.parish.id).toBe('14');
+    expect(b.kind === 'inherited' && b.assignment.parish.id).toBe('15');
   });
 
   it('street in neither rules nor polygon is unassigned', () => {
@@ -106,8 +106,8 @@ describe('createResolver validation', () => {
     const bad: CityData = {
       ...data,
       rules: [
-        { streetId: 'nema', from: 1, to: 5, parity: 'all', territoryId: '14' },
-        { streetId: 'futoska', from: 9, to: 3, parity: 'all', territoryId: '99' },
+        { streetId: 'nema', from: 1, to: 5, parity: 'all', parishId: '14' },
+        { streetId: 'futoska', from: 9, to: 3, parity: 'all', parishId: '99' },
       ],
     };
     try {
