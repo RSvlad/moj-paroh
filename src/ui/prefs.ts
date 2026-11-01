@@ -14,7 +14,7 @@ import { cyrillicToLatin } from '../i18n/translit';
 const SCRIPT_KEY = 'moj-paroh:script';
 // Also read by the inline script in index.html, which sets the theme before the first paint.
 const THEME_KEY = 'moj-paroh:theme';
-const TITLE = 'Територије';
+const TITLE = 'Парохије';
 
 const SCRIPTS = ['cyr', 'lat'] as const;
 const THEMES = ['auto', 'light', 'dark'] as const;

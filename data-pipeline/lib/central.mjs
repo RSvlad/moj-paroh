@@ -72,7 +72,7 @@ export function splitByCity(raw, title, cityIds, problems) {
 }
 
 /**
- * Fingerprint of everything that decides a city's territory borders: its rows, the files territories.py
+ * Fingerprint of everything that decides a city's parish borders: its rows, the files parishes.py
  * and the input builders read, and the code itself. HMAC with a secret, because the result is published
  * (build-state.json) and a plain hash of private rows could be used to confirm guesses about them.
  */

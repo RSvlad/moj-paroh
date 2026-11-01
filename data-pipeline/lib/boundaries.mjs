@@ -1,19 +1,19 @@
-// Hand-drawn territory borders from the Sheet's optional "Границе" tab (private data: never committed).
-// Columns: територија (id), геометрија (GeoJSON Polygon/MultiPolygon, WGS84). They replace the automatic
-// borders of territories.py, which reads them from data-pipeline/work/<city>/overrides/<id>.geojson.
+// Hand-drawn parish borders from the Sheet's optional "Границе" tab (private data: never committed).
+// Columns: парохија (id), геометрија (GeoJSON Polygon/MultiPolygon, WGS84). They replace the automatic
+// borders of parishes.py, which reads them from data-pipeline/work/<city>/overrides/<id>.geojson.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { PipelineError } from './build-city.mjs';
+import { PARISH_COLUMN, PipelineError } from './build-city.mjs';
 
 const WORK_DIR = 'data-pipeline/work';
 
 /** raw (2D array, header first) | null -> [{ id, geometry }]. Throws PipelineError on bad rows. */
-export function parseBoundaries(raw, territoryIds) {
+export function parseBoundaries(raw, parishIds) {
   if (!raw || raw.length < 2) return [];
   const head = raw[0].map((h) => String(h).trim().toLowerCase());
-  const idCol = head.indexOf('територија');
+  const idCol = head.findIndex((h) => PARISH_COLUMN.includes(h));
   const geoCol = head.indexOf('геометрија');
   if (idCol < 0 || geoCol < 0) {
-    throw new PipelineError(['Границе: недостају колоне „територија“ и „геометрија“']);
+    throw new PipelineError(['Границе: недостају колоне „парохија“ и „геометрија“']);
   }
   const problems = [];
   const out = new Map();
@@ -22,7 +22,7 @@ export function parseBoundaries(raw, territoryIds) {
     const id = String(r[idCol] ?? '').trim();
     const text = String(r[geoCol] ?? '').trim();
     if (!id && !text) return;
-    if (!territoryIds.has(id)) return void problems.push(`Границе, ред ${row}: територија „${id}“ не постоји у листу „Територије“`);
+    if (!parishIds.has(id)) return void problems.push(`Границе, ред ${row}: парохија „${id}“ не постоји у листу „Парохије“`);
     let geometry;
     try {
       geometry = JSON.parse(text);

@@ -1,7 +1,7 @@
 import { normalizeText } from './normalize';
 import type { Place, Street } from '../resolver/types';
 
-/** One search result: a street or a place (capital, collector point, ...). */
+/** One search result: a street or a place (church, collector point, ...). */
 export type Hit =
   | { kind: 'street'; street: Street }
   | { kind: 'place'; place: Place };

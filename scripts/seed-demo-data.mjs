@@ -11,7 +11,7 @@ const CITIES = `${OUT_DIR}/cities.json`;
 const seeds = [
   ['fixtures/demo-cities.json', CITIES],
   ['fixtures/demo-novi-sad.json', `${OUT_DIR}/novi-sad.json`],
-  ['fixtures/demo-novi-sad.territories.geojson', `${OUT_DIR}/novi-sad.territories.geojson`],
+  ['fixtures/demo-novi-sad.parishes.geojson', `${OUT_DIR}/novi-sad.parishes.geojson`],
 ];
 
 for (const [source, target] of seeds) {

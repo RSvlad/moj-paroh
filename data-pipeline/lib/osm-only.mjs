@@ -27,13 +27,13 @@ export function readCitiesYml(path = CITIES_YML) {
   return cities.filter((c) => c.name);
 }
 
-/** CityData of a city with streets only: no territories, rules or places. */
+/** CityData of a city with streets only: no parishes, rules or places. */
 export function buildOsmOnlyCity({ id, name, osm, buildDate }) {
   const empty = {
     city: id,
     name,
     updated: osm.fetched ?? buildDate,
-    territories: [],
+    parishes: [],
     streets: [],
     rules: [],
     internal: [],

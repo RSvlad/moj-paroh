@@ -1,6 +1,6 @@
 name: Geocode places
 
-# One-off / on demand: geocodes the Sheet's "Тачке" addresses (capitals and other points) and pushes
+# One-off / on demand: geocodes the Sheet's "Тачке" addresses (churches and other points) and pushes
 # data-pipeline/cache/<city>/geocode-cache.json to a branch, to be merged by a pull request.
 # The cache is committed on purpose: the normal build never calls a geocoder (see README, "Геокодирање тачака").
 # Run it again after adding places; only addresses missing from the cache are looked up.

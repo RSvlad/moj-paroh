@@ -11,7 +11,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fetchModifiedDate, fetchSheet, getAccessToken, parseCredentials, DRIVE_METADATA_SCOPE, SHEETS_SCOPE } from '../data-pipeline/lib/sheets.mjs';
 
 const OUT = 'data-pipeline/work/migration';
+// Tab names of the old per-city Sheets; the first one is called "Парохије" in the central Sheet (#1).
 const TABS = ['Територије', 'Правила', 'Тачке', 'Обим', 'Границе'];
+const CENTRAL_TITLE = { 'Територије': 'Парохије' };
+const centralTitle = (title) => CENTRAL_TITLE[title] ?? title;
 
 const csvCell = (v) => {
   const s = String(v ?? '');
@@ -55,7 +58,7 @@ for (const c of cities) {
     const [header = [], ...body] = raw;
     merged[title] ??= [['град', ...header]];
     if (merged[title][0].slice(1).join('\u0000') !== header.join('\u0000')) {
-      console.warn(`! ${c.id}: колоне листа „${title}“ су другачије од првог града; проверите ${title}.csv након увоза.`);
+      console.warn(`! ${c.id}: колоне листа „${title}“ су другачије од првог града; проверите ${centralTitle(title)}.csv након увоза.`);
     }
     for (const row of body) if (row.some((v) => String(v).trim() !== '')) merged[title].push([c.id, ...row]);
   }
@@ -67,6 +70,6 @@ for (const c of cities) {
 
 writeFileSync(`${OUT}/Градови.csv`, toCsv(cityRows));
 for (const [title, rows] of Object.entries(merged)) {
-  if (rows) writeFileSync(`${OUT}/${title}.csv`, toCsv(rows));
+  if (rows) writeFileSync(`${OUT}/${centralTitle(title)}.csv`, toCsv(rows));
 }
-console.log(`\nГотово: ${OUT}/ (${Object.entries(merged).filter(([, r]) => r).map(([t]) => t).concat('Градови').join(', ')}).`);
+console.log(`\nГотово: ${OUT}/ (${Object.entries(merged).filter(([, r]) => r).map(([t]) => centralTitle(t)).concat('Градови').join(', ')}).`);

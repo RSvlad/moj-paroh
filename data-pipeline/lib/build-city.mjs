@@ -8,8 +8,11 @@ export class PipelineError extends Error {
   }
 }
 
+// "територија" is the column name from before the parish vocabulary (#1); Sheets that still use it keep working.
+export const PARISH_COLUMN = ['парохија', 'територија'];
+
 const COLUMNS = {
-  territories: {
+  parishes: {
     id: ['ид', 'id', 'број'],
     name: ['назив', 'име'],
     color: ['боја'],
@@ -23,22 +26,22 @@ const COLUMNS = {
     from: ['од'],
     to: ['до'],
     parity: ['паритет', 'страна'],
-    territory: ['територија'],
+    parish: PARISH_COLUMN,
     assignee: ['задужен', 'задужени'],
     note: ['напомена'],
   },
   places: {
     name: ['назив', 'име'],
-    territory: ['територија'],
+    parish: PARISH_COLUMN,
     kind: ['врста', 'тип'],
     address: ['адреса'],
     lat: ['ширина', 'lat', 'latitude'],
     lng: ['дужина', 'lng', 'lon', 'longitude'],
     note: ['напомена'],
   },
-  // The "Обим" tab: streets that bound a territory (barriers for territories.py), see lib/territories-input.mjs.
+  // The "Обим" tab: streets that bound a parish (barriers for parishes.py), see lib/parishes-input.mjs.
   scope: {
-    territory: ['територија'],
+    parish: PARISH_COLUMN,
     street: ['улица'],
     settlement: ['насеље', 'место'],
     from: ['од'],
@@ -56,15 +59,17 @@ const COLUMNS = {
 };
 
 const REQUIRED = {
-  territories: ['id', 'name', 'color', 'primary'],
-  rules: ['street', 'territory'],
-  places: ['name', 'territory', 'address'],
-  scope: ['territory', 'street'],
+  parishes: ['id', 'name', 'color', 'primary'],
+  rules: ['street', 'parish'],
+  places: ['name', 'parish', 'address'],
+  scope: ['parish', 'street'],
   cities: ['id', 'name'],
 };
 
 const KIND = new Map([
-  ['престоница', 'capital'], ['prestonica', 'capital'], ['capital', 'capital'],
+  ['парохијски храм', 'church'], ['храм', 'church'], ['hram', 'church'], ['church', 'church'],
+  // Names used before the parish vocabulary (#1) still work.
+  ['престоница', 'church'], ['prestonica', 'church'], ['capital', 'church'],
   ['сабирна', 'collector'], ['sabirna', 'collector'], ['collector', 'collector'],
   ['', 'other'], ['остало', 'other'], ['ostalo', 'other'], ['other', 'other'],
 ]);
@@ -135,24 +140,24 @@ function parseBound(text, where, problems) {
   return Number(text);
 }
 
-export function buildCity({ city, name, reportEmail, updated, territoriesRaw, rulesRaw, placesRaw = null }) {
+export function buildCity({ city, name, reportEmail, updated, parishesRaw, rulesRaw, placesRaw = null }) {
   const problems = [];
-  const territoryRows = readTable('territories', 'Територије', territoriesRaw, problems);
+  const parishRows = readTable('parishes', 'Парохије', parishesRaw, problems);
   const ruleRows = readTable('rules', 'Правила', rulesRaw, problems);
   // The "Тачке" tab is optional. Without it the city simply has no places; once it exists,
-  // every territory must have exactly one capital.
+  // every parish must have exactly one church.
   const placeRows = placesRaw === null ? null : readTable('places', 'Тачке', placesRaw, problems);
 
-  const territories = [];
-  const territoryIds = new Set();
-  for (const { row, values: v } of territoryRows) {
-    const where = `Територије, ред ${row}`;
+  const parishes = [];
+  const parishIds = new Set();
+  for (const { row, values: v } of parishRows) {
+    const where = `Парохије, ред ${row}`;
     if (!v.id) problems.push(`${where}: нема ид`);
-    else if (territoryIds.has(v.id)) problems.push(`${where}: ид „${v.id}“ се понавља`);
+    else if (parishIds.has(v.id)) problems.push(`${where}: ид „${v.id}“ се понавља`);
     if (!v.name) problems.push(`${where}: нема назива`);
     if (!/^#[0-9a-fA-F]{6}$/.test(v.color)) problems.push(`${where}: боја „${v.color}“ мора бити облика #rrggbb`);
     if (!v.primary) problems.push(`${where}: нема задуженог`);
-    territoryIds.add(v.id);
+    parishIds.add(v.id);
     const t = {
       id: v.id,
       name: v.name,
@@ -160,7 +165,7 @@ export function buildCity({ city, name, reportEmail, updated, territoriesRaw, ru
       defaults: { primary: v.primary, ...(v.deputy && { deputy: v.deputy }) },
       ...(v.note && { note: v.note }),
     };
-    territories.push(t);
+    parishes.push(t);
   }
 
   // Street identity is name + settlement; the same name in two settlements stays two streets.
@@ -193,8 +198,8 @@ export function buildCity({ city, name, reportEmail, updated, territoriesRaw, ru
       streetsByKey.set(key, { name: v.street, settlement: v.settlement });
     }
 
-    if (!v.territory) problems.push(`${where}: нема територије`);
-    else if (!territoryIds.has(v.territory)) problems.push(`${where}: непозната територија „${v.territory}“`);
+    if (!v.parish) problems.push(`${where}: нема парохије`);
+    else if (!parishIds.has(v.parish)) problems.push(`${where}: непозната парохија „${v.parish}“`);
 
     const from = parseBound(v.from, `${where}, колона „од“`, problems);
     const to = parseBound(v.to, `${where}, колона „до“`, problems);
@@ -209,7 +214,7 @@ export function buildCity({ city, name, reportEmail, updated, territoriesRaw, ru
         from,
         to,
         parity: parity ?? 'all',
-        territoryId: v.territory,
+        parishId: v.parish,
         ...(v.assignee && { assignee: v.assignee }),
         ...(v.note && { note: v.note }),
       },
@@ -239,7 +244,7 @@ export function buildCity({ city, name, reportEmail, updated, territoriesRaw, ru
     streets.push({ id, name: s.name, ...(s.settlement && { settlement: s.settlement }) });
   }
 
-  const places = placeRows === null ? [] : buildPlaces(placeRows, territoryIds, territories, problems);
+  const places = placeRows === null ? [] : buildPlaces(placeRows, parishIds, parishes, problems);
 
   if (problems.length) throw new PipelineError(problems);
 
@@ -248,10 +253,10 @@ export function buildCity({ city, name, reportEmail, updated, territoriesRaw, ru
     name,
     updated,
     ...(reportEmail && { reportEmail }),
-    territories,
+    parishes,
     streets,
     rules: rules.map(({ key, rule }) => ({ streetId: idByKey.get(key), ...rule })),
-    // Filled by the territory-drawing step (#8); the Sheet only carries explicit rules.
+    // Filled by the parish-drawing step (#8); the Sheet only carries explicit rules.
     internal: [],
     places,
   };
@@ -259,24 +264,24 @@ export function buildCity({ city, name, reportEmail, updated, territoriesRaw, ru
 
 /**
  * "Тачке" rows -> Place[] (no coordinates yet: those come from the geocode cache, see places.mjs).
- * Exactly one capital per territory; ids depend on the name (plus territory when a name repeats),
+ * Exactly one church per parish; ids depend on the name (plus parish when a name repeats),
  * never on row order.
  */
-function buildPlaces(rows, territoryIds, territories, problems) {
+function buildPlaces(rows, parishIds, parishes, problems) {
   const checked = [];
-  const capitals = new Map();
+  const churches = new Map();
   for (const { row, values: v } of rows) {
     const where = `Тачке, ред ${row}`;
     if (!v.name) problems.push(`${where}: нема назива`);
     if (!v.address) problems.push(`${where}: нема адресе`);
-    if (!v.territory) problems.push(`${where}: нема територије`);
-    else if (!territoryIds.has(v.territory)) problems.push(`${where}: непозната територија „${v.territory}“`);
+    if (!v.parish) problems.push(`${where}: нема парохије`);
+    else if (!parishIds.has(v.parish)) problems.push(`${where}: непозната парохија „${v.parish}“`);
     const kind = KIND.get(v.kind.toLowerCase());
-    if (!kind) problems.push(`${where}: непозната врста „${v.kind}“ (престоница, сабирна или остало)`);
-    if (kind === 'capital' && v.territory) {
-      const prev = capitals.get(v.territory);
-      if (prev) problems.push(`${where}: територија „${v.territory}“ већ има престоницу (ред ${prev})`);
-      else capitals.set(v.territory, row);
+    if (!kind) problems.push(`${where}: непозната врста „${v.kind}“ (храм, сабирна или остало)`);
+    if (kind === 'church' && v.parish) {
+      const prev = churches.get(v.parish);
+      if (prev) problems.push(`${where}: парохија „${v.parish}“ већ има парохијски храм (ред ${prev})`);
+      else churches.set(v.parish, row);
     }
     // Optional coordinates typed into the Sheet ("ширина"/"дужина"); both or neither. A decimal comma is accepted.
     const num = (s) => (s === '' ? null : Number(s.replace(',', '.')));
@@ -291,8 +296,8 @@ function buildPlaces(rows, territoryIds, territories, problems) {
     }
     checked.push({ row, v, kind: kind ?? 'other', point });
   }
-  for (const t of territories) {
-    if (!capitals.has(t.id)) problems.push(`Тачке: територија „${t.id}“ (${t.name}) нема престоницу`);
+  for (const t of parishes) {
+    if (!churches.has(t.id)) problems.push(`Тачке: парохија „${t.id}“ (${t.name}) нема парохијског храма`);
   }
 
   const nameCount = new Map();
@@ -300,15 +305,15 @@ function buildPlaces(rows, territoryIds, territories, problems) {
   const used = new Map();
   const places = [];
   for (const { row, v, kind, point } of checked) {
-    if (!v.name || !v.address || !territoryIds.has(v.territory)) continue; // already reported
+    if (!v.name || !v.address || !parishIds.has(v.parish)) continue; // already reported
     const base = slug(v.name);
-    const id = nameCount.get(base) > 1 ? `${base}-${slug(v.territory)}` : base;
+    const id = nameCount.get(base) > 1 ? `${base}-${slug(v.parish)}` : base;
     if (!id) {
       problems.push(`Тачке, ред ${row}: од назива „${v.name}“ се не може направити ид`);
       continue;
     }
     if (used.has(id)) {
-      problems.push(`Тачке, ред ${row}: тачка „${v.name}“ у територији „${v.territory}“ се понавља (ред ${used.get(id)})`);
+      problems.push(`Тачке, ред ${row}: тачка „${v.name}“ у парохији „${v.parish}“ се понавља (ред ${used.get(id)})`);
       continue;
     }
     used.set(id, row);
@@ -316,7 +321,7 @@ function buildPlaces(rows, territoryIds, territories, problems) {
       id,
       name: v.name,
       kind,
-      territoryId: v.territory,
+      parishId: v.parish,
       address: v.address,
       ...(point ?? {}),
       ...(v.note && { note: v.note }),
