@@ -8,12 +8,13 @@ import type { CityData, Place, Resolver } from '../resolver';
 import { containsPoint, polygonsOf } from '../geo/geo';
 import type { Geometry } from '../geo/geo';
 import { tx, useScript } from './prefs';
+import { tr } from '../profile';
 import { STYLE_URL } from './mapStyle';
 
 maplibregl.setWorkerUrl(workerUrl);
 
 /** What the user picked on the map; the card for it is drawn by the caller. */
-export type MapSelection = { kind: 'parish'; id: string } | { kind: 'place'; id: string };
+export type MapSelection = { kind: 'territory'; id: string } | { kind: 'place'; id: string };
 
 /** "Show on map" from a result card: the points to frame. A new `seq` re-frames even for the same points. */
 export interface MapFocus {
@@ -59,7 +60,7 @@ function boundsOfPlaces(places: readonly Place[]): Bounds | null {
   return b;
 }
 
-/** Centroid of the largest outer ring: a stable spot for the parish label. */
+/** Centroid of the largest outer ring: a stable spot for the territory label. */
 function labelPoint(g: Geometry): [number, number] | null {
   let best: { area: number; point: [number, number] } | null = null;
   for (const poly of polygonsOf(g)) {
@@ -89,7 +90,7 @@ interface PlaceMarker {
 
 /** Name of a marker for assistive technology, in the chosen script. */
 function markerLabel(place: Place): string {
-  return tx(`${place.kind === 'church' ? 'Парохијски храм' : 'Тачка'}: ${place.name}`);
+  return tx(`${place.kind === 'capital' ? tr('capital.label') : 'Тачка'}: ${place.name}`);
 }
 
 interface Props {
@@ -99,14 +100,14 @@ interface Props {
   selected: MapSelection | null;
   /** Points to frame after "Прикажи на мапи" on a result card (applied once the map is ready, per `seq`). */
   focus: MapFocus | null;
-  /** Show the smaller markers (collection points, other); churches are always shown. */
+  /** Show the smaller markers (collection points, other); capitals are always shown. */
   showPoints: boolean;
-  /** Parishes to show (filters); null = all. Layers, labels and markers of the others are hidden. */
+  /** Territories to show (filters); null = all. Layers, labels and markers of the others are hidden. */
   visible: ReadonlySet<string> | null;
   /** The user's GPS position, if they asked "Where am I?". It is only drawn, never stored or sent. */
   userPoint: { lat: number; lng: number } | null;
-  /** Parish containing `userPoint` (null = outside all of them; `polygons` false = the map has none to look in). */
-  onLocated: (parishId: string | null, polygons: boolean) => void;
+  /** Territory containing `userPoint` (null = outside all of them; `polygons` false = the map has none to look in). */
+  onLocated: (territoryId: string | null, polygons: boolean) => void;
   onSelect: (s: MapSelection | null) => void;
 }
 
@@ -137,7 +138,7 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
       // A city whose borders are not drawn yet (404) still gets the basemap and its points; any other failure is an error.
       let collection: Collection = { type: 'FeatureCollection', features: [] };
       try {
-        const r = await fetch(`data/${encodeURIComponent(cityId)}.parishes.geojson`);
+        const r = await fetch(`data/${encodeURIComponent(cityId)}.territories.geojson`);
         if (r.ok) collection = (await r.json()) as Collection;
         else if (r.status !== 404) throw new Error('Мапа тренутно није доступна.');
       } catch {
@@ -147,11 +148,11 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
       if (cancelled || !box.current) return;
       setNoBorders(collection.features.length === 0);
 
-      // Colours and names come from the Sheet data; a polygon without a known parish is "unassigned" grey.
+      // Colours and names come from the Sheet data; a polygon without a known territory is "unassigned" grey.
       const features = collection.features.map((f) => {
         const id = String(f.properties.id ?? '');
-        const parish = resolver.parishes.get(id);
-        return { ...f, properties: { id, color: parish?.color ?? UNASSIGNED_COLOR, assigned: !!parish } };
+        const territory = resolver.territories.get(id);
+        return { ...f, properties: { id, color: territory?.color ?? UNASSIGNED_COLOR, assigned: !!territory } };
       });
       const bounds = boundsOf(features) ?? boundsOfPlaces(resolver.places);
       featuresRef.current = features.filter((f) => f.properties.assigned).map((f) => ({ id: f.properties.id, geometry: f.geometry }));
@@ -170,33 +171,33 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
 
       map.on('load', () => {
         if (cancelled || !map) return;
-        map.addSource('parishes', { type: 'geojson', data: { type: 'FeatureCollection', features } as never });
+        map.addSource('territories', { type: 'geojson', data: { type: 'FeatureCollection', features } as never });
         map.addLayer({
-          id: 'parishes-fill', type: 'fill', source: 'parishes',
+          id: 'territories-fill', type: 'fill', source: 'territories',
           paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['case', ['get', 'assigned'], 0.35, 0.2] },
         });
         map.addLayer({
-          id: 'parishes-line', type: 'line', source: 'parishes',
+          id: 'territories-line', type: 'line', source: 'territories',
           paint: { 'line-color': ['get', 'color'], 'line-width': 2.5 },
         });
         map.addLayer({
-          id: 'parishes-selected', type: 'line', source: 'parishes',
+          id: 'territories-selected', type: 'line', source: 'territories',
           filter: ['==', ['get', 'id'], '\u0000'],
           paint: { 'line-color': '#1b1b1b', 'line-width': 4 },
         });
-        map.on('mouseenter', 'parishes-fill', () => { map!.getCanvas().style.cursor = 'pointer'; });
-        map.on('mouseleave', 'parishes-fill', () => { map!.getCanvas().style.cursor = ''; });
+        map.on('mouseenter', 'territories-fill', () => { map!.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'territories-fill', () => { map!.getCanvas().style.cursor = ''; });
         map.on('click', (e) => {
-          const hit = map!.queryRenderedFeatures(e.point, { layers: ['parishes-fill'] })[0];
+          const hit = map!.queryRenderedFeatures(e.point, { layers: ['territories-fill'] })[0];
           const id = hit?.properties?.assigned ? String(hit.properties.id) : null;
-          selectRef.current(id ? { kind: 'parish', id } : null);
+          selectRef.current(id ? { kind: 'territory', id } : null);
         });
         setStatus({ kind: 'ready' });
       });
 
-      // Parish labels (decoration; the parishes are also listed as buttons next to the map).
+      // Territory labels (decoration; the territories are also listed as buttons next to the map).
       for (const f of features) {
-        const t = resolver.parishes.get(f.properties.id);
+        const t = resolver.territories.get(f.properties.id);
         const spot = t && labelPoint(f.geometry);
         const b = boundsOf([f]);
         if (b && t) boundsRef.current.set(t.id, b);
@@ -209,18 +210,18 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
         labelsRef.current.push({ id: t.id, text: `${t.id} ${t.name}`, el });
       }
 
-      // Church = star, other points = smaller dot. Places the pipeline could not geocode have no marker.
+      // Capital = star, other points = smaller dot. Places the pipeline could not geocode have no marker.
       markersRef.current = [];
       for (const place of resolver.places) {
         if (place.lat === undefined || place.lng === undefined) continue;
         const el = document.createElement('button');
         el.type = 'button';
-        el.className = `map-marker ${place.kind === 'church' ? 'church' : 'point'}`;
-        el.textContent = place.kind === 'church' ? '★' : '';
-        el.style.setProperty('--tc', resolver.parishes.get(place.parishId)?.color ?? UNASSIGNED_COLOR);
+        el.className = `map-marker ${place.kind === 'capital' ? 'capital' : 'point'}`;
+        el.textContent = place.kind === 'capital' ? '★' : '';
+        el.style.setProperty('--tc', resolver.territories.get(place.territoryId)?.color ?? UNASSIGNED_COLOR);
         el.setAttribute('aria-label', markerLabel(place));
         el.addEventListener('click', (ev) => {
-          ev.stopPropagation(); // not a click on the parish underneath
+          ev.stopPropagation(); // not a click on the territory underneath
           selectRef.current({ kind: 'place', id: place.id });
         });
         new maplibregl.Marker({ element: el }).setLngLat([place.lng, place.lat]).addTo(map);
@@ -248,20 +249,20 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
     userMarkerRef.current?.getElement().setAttribute('aria-label', tx('Ваша локација'));
   }, [script, status.kind]);
 
-  // Layer switch for the smaller markers, and the parish filter for everything on the map.
+  // Layer switch for the smaller markers, and the territory filter for everything on the map.
   useEffect(() => {
     for (const { place, el } of markersRef.current) {
-      el.hidden = (place.kind !== 'church' && !showPoints) || (!!visible && !visible.has(place.parishId));
+      el.hidden = (place.kind !== 'capital' && !showPoints) || (!!visible && !visible.has(place.territoryId));
     }
     for (const { id, el } of labelsRef.current) el.hidden = !!visible && !visible.has(id);
     const map = mapRef.current;
     if (!map || status.kind !== 'ready') return;
     const shown = visible ? ['in', ['get', 'id'], ['literal', [...visible]]] : null;
-    map.setFilter('parishes-fill', shown as never);
-    map.setFilter('parishes-line', shown as never);
+    map.setFilter('territories-fill', shown as never);
+    map.setFilter('territories-line', shown as never);
   }, [showPoints, visible, status.kind]);
 
-  // "Where am I?": the parish containing the point (same ids as the search), marker and camera.
+  // "Where am I?": the territory containing the point (same ids as the search), marker and camera.
   useEffect(() => {
     userMarkerRef.current?.remove();
     userMarkerRef.current = null;
@@ -291,14 +292,14 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
     const map = mapRef.current;
     if (!map || status.kind !== 'ready') return;
     const selectedPlace = selected?.kind === 'place' ? resolver.places.find((x) => x.id === selected.id) : undefined;
-    // A selected point highlights its parish too, so "Прикажи на мапи" shows where the street's parish is.
-    const highlighted = selected?.kind === 'parish' ? selected.id : selectedPlace?.parishId;
-    map.setFilter('parishes-selected', ['==', ['get', 'id'], highlighted ?? '\u0000']);
+    // A selected point highlights its territory too, so "Прикажи на мапи" shows where the street's territory is.
+    const highlighted = selected?.kind === 'territory' ? selected.id : selectedPlace?.territoryId;
+    map.setFilter('territories-selected', ['==', ['get', 'id'], highlighted ?? '\u0000']);
     for (const { place, el } of markersRef.current) {
       el.setAttribute('aria-pressed', String(selected?.kind === 'place' && selected.id === place.id));
     }
     const animate = !reducedMotion();
-    if (selected?.kind === 'parish') {
+    if (selected?.kind === 'territory') {
       const b = boundsRef.current.get(selected.id);
       if (b) map.fitBounds(b, { padding: 60, animate, maxZoom: 16 });
     } else if (selectedPlace && selectedPlace.lat !== undefined && selectedPlace.lng !== undefined) {
@@ -306,7 +307,7 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
     }
   }, [selected?.kind, selected?.id, status.kind]);
 
-  // "Прикажи на мапи": frame the churches of the result (declared after the selection effect, so it wins the camera).
+  // "Прикажи на мапи": frame the capitals of the result (declared after the selection effect, so it wins the camera).
   useEffect(() => {
     const map = mapRef.current;
     if (!focus || !map || status.kind !== 'ready') return;
@@ -324,7 +325,7 @@ export default function MapView({ cityId, data, resolver, selected, focus, showP
       {status.kind === 'loading' && <p class="map-status muted" role="status">Учитавање мапе…</p>}
       {status.kind === 'error' && <p class="map-status error" role="alert">{status.message}</p>}
       {status.kind === 'ready' && noBorders && (
-        <p class="map-status muted note" role="status">Границе парохија још нису нацртане.</p>
+        <p class="map-status muted note" role="status">{tr('territory.bordersMissing')}</p>
       )}
     </div>
   );

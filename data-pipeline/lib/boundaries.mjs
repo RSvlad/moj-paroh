@@ -1,19 +1,20 @@
-// Hand-drawn parish borders from the Sheet's optional "Границе" tab (private data: never committed).
-// Columns: парохија (id), геометрија (GeoJSON Polygon/MultiPolygon, WGS84). They replace the automatic
-// borders of parishes.py, which reads them from data-pipeline/work/<city>/overrides/<id>.geojson.
+// Hand-drawn territory borders from the Sheet's optional "Границе" tab (private data: never committed).
+// Columns: територија (id), геометрија (GeoJSON Polygon/MultiPolygon, WGS84). They replace the automatic
+// borders of territories.py, which reads them from data-pipeline/work/<city>/overrides/<id>.geojson.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { PARISH_COLUMN, PipelineError } from './build-city.mjs';
+import { PipelineError, TERRITORIES_TAB, TERRITORY_COLUMN } from './build-city.mjs';
+import { tr } from '../../profiles/load.mjs';
 
 const WORK_DIR = 'data-pipeline/work';
 
 /** raw (2D array, header first) | null -> [{ id, geometry }]. Throws PipelineError on bad rows. */
-export function parseBoundaries(raw, parishIds) {
+export function parseBoundaries(raw, territoryIds) {
   if (!raw || raw.length < 2) return [];
   const head = raw[0].map((h) => String(h).trim().toLowerCase());
-  const idCol = head.findIndex((h) => PARISH_COLUMN.includes(h));
+  const idCol = head.findIndex((h) => TERRITORY_COLUMN.includes(h));
   const geoCol = head.indexOf('геометрија');
   if (idCol < 0 || geoCol < 0) {
-    throw new PipelineError(['Границе: недостају колоне „парохија“ и „геометрија“']);
+    throw new PipelineError([tr('boundaries.missingColumns', { column: TERRITORY_COLUMN[0] })]);
   }
   const problems = [];
   const out = new Map();
@@ -22,7 +23,7 @@ export function parseBoundaries(raw, parishIds) {
     const id = String(r[idCol] ?? '').trim();
     const text = String(r[geoCol] ?? '').trim();
     if (!id && !text) return;
-    if (!parishIds.has(id)) return void problems.push(`Границе, ред ${row}: парохија „${id}“ не постоји у листу „Парохије“`);
+    if (!territoryIds.has(id)) return void problems.push(tr('boundaries.unknownTerritory', { row, id, tab: TERRITORIES_TAB }));
     let geometry;
     try {
       geometry = JSON.parse(text);

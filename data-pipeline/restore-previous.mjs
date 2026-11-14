@@ -5,28 +5,38 @@
 //   SITE_URL  address of the deployed site, e.g. https://owner.github.io/repo/
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { ID_PATTERN } from './lib/central.mjs';
-import { upgradeLegacyCityData } from './lib/legacy.mjs';
+import { profileHook } from '../profiles/load.mjs';
 
 const site = (process.env.SITE_URL ?? '').replace(/\/?$/, '/');
 const dir = process.env.PREVIOUS_DATA_DIR ?? 'data-pipeline/work/previous';
+
+// Optional profiles/<name>/migrate-previous.mjs for a deployment whose published data has an older shape. It exports
+// upgradeCityData(data) -> data (CityData of the old shape -> current) and previousGeojsonNames(id) -> [file names
+// the borders were published under before]. It is deleted once a deploy has replaced the old data.
+const migrate = await profileHook('migrate-previous.mjs');
 
 async function get(path) {
   const res = await fetch(`${site}data/${path}`, { signal: AbortSignal.timeout(20000) });
   return res.ok ? Buffer.from(await res.arrayBuffer()) : null;
 }
 
-// Files published before the parish vocabulary (#1): borders were named <city>.territories.geojson.
+// A file under its current name, else under one of the names the profile's migration lists.
 async function getPrevious(name) {
   const body = await get(name);
-  if (body || !name.endsWith('.parishes.geojson')) return body;
-  return get(name.replace('.parishes.geojson', '.territories.geojson'));
+  const id = name.endsWith('.territories.geojson') ? name.slice(0, -'.territories.geojson'.length) : null;
+  if (body || id === null || !migrate?.previousGeojsonNames) return body;
+  for (const old of migrate.previousGeojsonNames(id)) {
+    const found = await get(old);
+    if (found) return found;
+  }
+  return null;
 }
 
-// Upgrades old-shape CityData; anything that is not parseable JSON is stored as it was.
+// Upgrades CityData of an old shape; anything that is not parseable JSON is stored as it was.
 function upgradeBody(name, body) {
-  if (!name.endsWith('.json')) return body;
+  if (!migrate?.upgradeCityData || !name.endsWith('.json')) return body;
   try {
-    return Buffer.from(JSON.stringify(upgradeLegacyCityData(JSON.parse(body.toString('utf8')))));
+    return Buffer.from(JSON.stringify(migrate.upgradeCityData(JSON.parse(body.toString('utf8')))));
   } catch {
     return body;
   }
@@ -48,7 +58,7 @@ try {
   const ids = JSON.parse(list.toString('utf8')).map((c) => c.id).filter((id) => ID_PATTERN.test(String(id)));
   let restored = 0;
   for (const id of ids) {
-    for (const name of [`${id}.json`, `${id}.parishes.geojson`]) {
+    for (const name of [`${id}.json`, `${id}.territories.geojson`]) {
       const body = await getPrevious(name);
       if (body) {
         writeFileSync(`${dir}/${name}`, upgradeBody(name, body));

@@ -1,6 +1,7 @@
 import type {
-  Assignment, CityData, HouseNumber, Parity, Place, Resolution, Rule, Street, Parish, ParishStreet,
+  Assignment, CityData, HouseNumber, Parity, Place, Resolution, Rule, Street, Territory, TerritoryStreet,
 } from './types';
+import { tr } from '../profile';
 
 export class DataError extends Error {
   constructor(public readonly problems: string[]) {
@@ -42,19 +43,19 @@ export function formatRange(rule: Pick<Rule, 'from' | 'to' | 'parity'>): string 
 
 /**
  * Decision order (plan §3):
- * 1. all matching rules for the number; 2. inherited from the parish the street lies in;
+ * 1. all matching rules for the number; 2. inherited from the territory the street lies in;
  * 3. unassigned. Construction validates references and throws DataError listing every problem.
  */
 export function createResolver(data: CityData) {
   const problems: string[] = [];
-  const parishes = new Map<string, Parish>(data.parishes.map((t) => [t.id, t]));
+  const territories = new Map<string, Territory>(data.territories.map((t) => [t.id, t]));
   const streets = new Map<string, Street>(data.streets.map((s) => [s.id, s]));
   const rulesByStreet = new Map<string, Rule[]>();
   const internal = new Map<string, string>();
 
   for (const r of data.rules) {
     if (!streets.has(r.streetId)) problems.push(`правило: непозната улица "${r.streetId}"`);
-    if (!parishes.has(r.parishId)) problems.push(`правило за "${r.streetId}": непозната парохија "${r.parishId}"`);
+    if (!territories.has(r.territoryId)) problems.push(tr('resolver.unknownTerritoryRule', { street: r.streetId, territory: r.territoryId }));
     if (r.from !== null && r.to !== null && r.from > r.to) problems.push(`правило за "${r.streetId}": од ${r.from} је веће од до ${r.to}`);
     const list = rulesByStreet.get(r.streetId) ?? [];
     list.push(r);
@@ -62,53 +63,53 @@ export function createResolver(data: CityData) {
   }
   for (const i of data.internal) {
     if (!streets.has(i.streetId)) problems.push(`унутрашња улица: непозната улица "${i.streetId}"`);
-    if (!parishes.has(i.parishId)) problems.push(`унутрашња улица "${i.streetId}": непозната парохија "${i.parishId}"`);
-    if (internal.has(i.streetId)) problems.push(`унутрашња улица "${i.streetId}" је у више парохија`);
-    internal.set(i.streetId, i.parishId);
+    if (!territories.has(i.territoryId)) problems.push(tr('resolver.unknownTerritoryInternal', { street: i.streetId, territory: i.territoryId }));
+    if (internal.has(i.streetId)) problems.push(tr('resolver.internalInMany', { street: i.streetId }));
+    internal.set(i.streetId, i.territoryId);
   }
   const places = data.places ?? [];
   const placeIds = new Set<string>();
-  const churches = new Map<string, Place>();
+  const capitals = new Map<string, Place>();
   for (const p of places) {
     if (placeIds.has(p.id)) problems.push(`тачка "${p.id}" се понавља`);
     placeIds.add(p.id);
-    if (!parishes.has(p.parishId)) problems.push(`тачка "${p.id}": непозната парохија "${p.parishId}"`);
-    if (p.kind === 'church') {
-      if (churches.has(p.parishId)) problems.push(`парохија "${p.parishId}" има више од једног парохијског храма`);
-      churches.set(p.parishId, p);
+    if (!territories.has(p.territoryId)) problems.push(tr('resolver.unknownTerritoryPlace', { place: p.id, territory: p.territoryId }));
+    if (p.kind === 'capital') {
+      if (capitals.has(p.territoryId)) problems.push(tr('resolver.manyCapitals', { territory: p.territoryId }));
+      capitals.set(p.territoryId, p);
     }
   }
   if (problems.length) throw new DataError(problems);
 
-  const assignmentFor = (parish: Parish, rule?: Rule): Assignment => ({
-    parish,
-    people: rule?.assignee ? { primary: rule.assignee } : parish.defaults,
+  const assignmentFor = (territory: Territory, rule?: Rule): Assignment => ({
+    territory,
+    people: rule?.assignee ? { primary: rule.assignee } : territory.defaults,
     rule,
   });
-  const fromRule = (r: Rule) => assignmentFor(parishes.get(r.parishId)!, r);
+  const fromRule = (r: Rule) => assignmentFor(territories.get(r.territoryId)!, r);
 
   return {
     streets: data.streets,
     places,
-    parishes,
+    territories,
 
-    /** The meeting place of a parish, if the data has one. */
-    churchOf(parishId: string): Place | undefined {
-      return churches.get(parishId);
+    /** The meeting place of a territory, if the data has one. */
+    capitalOf(territoryId: string): Place | undefined {
+      return capitals.get(territoryId);
     },
 
     /**
-     * Streets of a parish for its printed card, by name: streets it owns by rules (with the ranges)
+     * Streets of a territory for its printed card, by name: streets it owns by rules (with the ranges)
      * and streets lying inside it. `rest` = it also owns the numbers no rule covers (a street inside it that has rules).
      */
-    streetsOf(parishId: string): ParishStreet[] {
-      const found = new Map<string, ParishStreet>();
+    streetsOf(territoryId: string): TerritoryStreet[] {
+      const found = new Map<string, TerritoryStreet>();
       for (const [streetId, rules] of rulesByStreet) {
-        const own = rules.filter((r) => r.parishId === parishId).sort(bySegment);
-        if (own.length) found.set(streetId, { street: streets.get(streetId)!, segments: own, rest: internal.get(streetId) === parishId });
+        const own = rules.filter((r) => r.territoryId === territoryId).sort(bySegment);
+        if (own.length) found.set(streetId, { street: streets.get(streetId)!, segments: own, rest: internal.get(streetId) === territoryId });
       }
       for (const [streetId, owner] of internal) {
-        if (owner === parishId && !found.has(streetId)) {
+        if (owner === territoryId && !found.has(streetId)) {
           found.set(streetId, { street: streets.get(streetId)!, segments: [], rest: false });
         }
       }
@@ -125,7 +126,7 @@ export function createResolver(data: CityData) {
         if (matches.length) {
           const assignments = matches.map(fromRule);
           const distinct = new Set(
-            assignments.map((a) => `${a.parish.id}|${a.people.primary}|${a.people.deputy ?? ''}`),
+            assignments.map((a) => `${a.territory.id}|${a.people.primary}|${a.people.deputy ?? ''}`),
           );
           return { kind: 'rules', street, house, assignments, border: distinct.size > 1 };
         }
@@ -135,9 +136,9 @@ export function createResolver(data: CityData) {
         return { kind: 'linear', street, segments: [...rules].sort(bySegment).map(fromRule) };
       }
 
-      const parishId = internal.get(streetId);
-      if (parishId) {
-        return { kind: 'inherited', street, house, assignment: assignmentFor(parishes.get(parishId)!) };
+      const territoryId = internal.get(streetId);
+      if (territoryId) {
+        return { kind: 'inherited', street, house, assignment: assignmentFor(territories.get(territoryId)!) };
       }
       return { kind: 'unassigned', street, house };
     },

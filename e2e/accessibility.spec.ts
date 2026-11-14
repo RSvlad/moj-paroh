@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { lookup, openApp } from './helpers';
+import { lookup, openApp, tr } from './helpers';
 
 const THEME_KEY = 'moj-paroh:theme';
 const SCRIPT_KEY = 'moj-paroh:script';
@@ -23,7 +23,7 @@ const screens: { name: string; show: (page: Page) => Promise<void> }[] = [
     name: 'панел мапе',
     show: async (page) => {
       await page.getByRole('button', { name: 'Прикажи мапу' }).click();
-      await expect(page.getByRole('list', { name: 'Парохије' })).toBeVisible();
+      await expect(page.getByRole('list', { name: tr('territory.listAria') })).toBeVisible();
     },
   },
 ];
@@ -49,7 +49,7 @@ for (const theme of ['light', 'dark'] as const) {
         await screen.show(page);
         const { violations } = await new AxeBuilder({ page })
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-          // The map canvas is third-party; the same parishes are reachable through the buttons above it.
+          // The map canvas is third-party; the same territories are reachable through the buttons above it.
           .exclude('.maplibregl-map')
           .analyze();
         expect(

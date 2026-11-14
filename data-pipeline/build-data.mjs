@@ -6,38 +6,39 @@
 //   PIPELINE_REQUIRED=1     fail instead of falling back to the demo seed (set for deploys)
 //
 // The Sheet has a "Градови" tab (id, назив, place, насеља, reportEmail, ажурирано) and the data tabs
-// "Парохије", "Правила" and optionally "Тачке", "Обим", "Границе", each with a "град" column (lib/central.mjs).
+// "Територије", "Правила" and optionally "Тачке", "Обим", "Границе", each with a "град" column (lib/central.mjs).
 // All tabs are read with two requests, however many cities there are.
 //
 // Without config the fictional demo data is used, for local development only.
 // If data-pipeline/cache/<city>/streets.json exists (streets.py), its streets are added to the city.
 // A city of cities.yml that is not in "Градови" but has that cache is still built, with its OSM streets only (lib/osm-only.mjs).
-// The optional "Тачке" tab gives the churches and other points; their coordinates come from
+// The optional "Тачке" tab gives the capitals and other points; their coordinates come from
 // data-pipeline/cache/<city>/geocode-cache.json (geocode.py), which reads work/<city>/places-input.json written here.
-// The street rules ("Правила") alone feed data-pipeline/parishes.py, which writes
-// public/data/<city>.parishes.geojson, the borders shown on the map. It needs Python (requirements.txt).
-// (A city with both an "Обим" tab and geocoded churches ("Тачке") is still drawn the older way, from the churches.)
+// The street rules ("Правила") alone feed data-pipeline/territories.py, which writes
+// public/data/<city>.territories.geojson, the borders shown on the map. It needs Python (requirements.txt).
+// (A city with both an "Обим" tab and geocoded capitals ("Тачке") is still drawn the older way, from the capitals.)
 //
 // A city with bad data does not stop the others: its previous deployed version (restored into
 // data-pipeline/work/previous by restore-previous.mjs) is kept with a warning. A city whose border-relevant
-// input is unchanged since the previous deploy (build-state.json) is not redrawn: parishes.py is skipped.
+// input is unchanged since the previous deploy (build-state.json) is not redrawn: territories.py is skipped.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { buildCity } from './lib/build-city.mjs';
+import { buildCity, TERRITORIES_TAB } from './lib/build-city.mjs';
 import { fingerprint, parseCitiesTab, splitByCity } from './lib/central.mjs';
 import { loadOsmStreets, mergeOsmStreets } from './lib/osm-index.mjs';
 import { loadOsmOnlyCities } from './lib/osm-only.mjs';
 import { attachCoordinates, loadGeocodeCache, writePlacesInput } from './lib/places.mjs';
 import { fetchTabs, getAccessToken, parseCredentials } from './lib/sheets.mjs';
 import { parseBoundaries, writeBoundaries } from './lib/boundaries.mjs';
-import { buildRulesInput, buildParishesInput, writeParishesInput } from './lib/parishes-input.mjs';
+import { activeProfile, tr } from '../profiles/load.mjs';
+import { buildRulesInput, buildTerritoriesInput, writeTerritoriesInput } from './lib/territories-input.mjs';
 
 const OUT_DIR = 'public/data';
 const PREVIOUS_DIR = process.env.PREVIOUS_DATA_DIR ?? 'data-pipeline/work/previous';
-const REQUIRED_TABS = ['Градови', 'Парохије', 'Правила'];
+const REQUIRED_TABS = ['Градови', TERRITORIES_TAB, 'Правила'];
+// Older names of the territories tab that still work (with a warning), see profiles/<name>/profile.json.
+const TAB_ALIASES = activeProfile().sheet.territoriesTabAliases;
 const OPTIONAL_TABS = ['Тачке', 'Обим', 'Границе'];
-// Tab names from before the parish vocabulary (#1): still read, with a warning, until the Sheet is renamed.
-const LEGACY_TABS = { 'Парохије': 'Територије' };
 
 function fail(message) {
   console.error(`\n✖ ${message}\n`);
@@ -63,7 +64,7 @@ function reportOsm(id, osm, { missingInOsm, added, skipped }) {
 }
 
 // A place without coordinates still works (navigation falls back to the address text), so this is
-// a warning here; report.py (#9) makes a church without coordinates critical because it seeds the drawing.
+// a warning here; report.py (#9) makes a capital without coordinates critical because it seeds the drawing.
 function reportPlaces(id, count, missing) {
   console.log(`✔ ${id}: тачака: ${count}, са координатама: ${count - missing.length}`);
   if (missing.length) {
@@ -97,12 +98,11 @@ const token = await getAccessToken(key).catch((e) => fail(e.message));
 const buildDate = new Date().toISOString().slice(0, 10);
 
 // ── Read everything once, then group by city in memory ────────────────────────────────────────────────────
-const tabs = await fetchTabs(token, sheetsId, [...REQUIRED_TABS, ...OPTIONAL_TABS, ...Object.values(LEGACY_TABS)])
-  .catch((e) => fail(e.message));
-for (const [title, legacy] of Object.entries(LEGACY_TABS)) {
-  if (tabs[title] === null && tabs[legacy] !== null) {
-    tabs[title] = tabs[legacy];
-    annotate(`лист „${legacy}“ је преименован у „${title}“; стари назив још ради, али преименујте лист у Sheet-у.`);
+const tabs = await fetchTabs(token, sheetsId, [...REQUIRED_TABS, ...OPTIONAL_TABS, ...TAB_ALIASES]).catch((e) => fail(e.message));
+for (const alias of TAB_ALIASES) {
+  if (tabs[TERRITORIES_TAB] === null && tabs[alias] !== null) {
+    tabs[TERRITORIES_TAB] = tabs[alias];
+    annotate(tr('build.tabRenamed', { old: alias, tab: TERRITORIES_TAB }));
   }
 }
 const structural = []; // errors that cannot be blamed on one city: they stop the build
@@ -143,8 +143,8 @@ function keepPrevious(id) {
   const data = `${PREVIOUS_DIR}/${id}.json`;
   if (!existsSync(data)) return false;
   copyFileSync(data, `${OUT_DIR}/${id}.json`);
-  const geo = `${PREVIOUS_DIR}/${id}.parishes.geojson`;
-  if (existsSync(geo)) copyFileSync(geo, `${OUT_DIR}/${id}.parishes.geojson`);
+  const geo = `${PREVIOUS_DIR}/${id}.territories.geojson`;
+  if (existsSync(geo)) copyFileSync(geo, `${OUT_DIR}/${id}.territories.geojson`);
   if (previousState[id]) state[id] = previousState[id];
   return true;
 }
@@ -156,7 +156,7 @@ for (const c of cities) {
       const table = byTab[title]?.get(c.id) ?? null;
       return optional && (!table || table.length < 2) ? null : table;
     };
-    const parishesRaw = pick('Парохије');
+    const territoriesRaw = pick(TERRITORIES_TAB);
     const rulesRaw = pick('Правила');
     const placesRaw = pick('Тачке', true);
     const scopeRaw = pick('Обим', true);
@@ -170,10 +170,10 @@ for (const c of cities) {
         + 'па упозорење о застарелим подацима неће радити.');
     }
     let data = buildCity({
-      city: c.id, name: c.name, reportEmail: c.reportEmail, updated, parishesRaw, rulesRaw, placesRaw,
+      city: c.id, name: c.name, reportEmail: c.reportEmail, updated, territoriesRaw, rulesRaw, placesRaw,
     });
     if (placesRaw === null) {
-      console.warn(`! ${c.id}: нема редова у листу „Тачке“; картице неће имати парохијски храм.`);
+      console.warn(`! ${tr('build.noPlacesTab', { city: c.id })}`);
     } else {
       const geocoded = attachCoordinates(data, loadGeocodeCache(c.id));
       data = geocoded.data;
@@ -189,44 +189,43 @@ for (const c of cities) {
       console.warn(`! ${c.id}: нема OSM индекса улица; претрага познаје само улице из Sheet-а. `
         + `Покрените: python data-pipeline/streets.py --city ${c.id}`);
     }
-    // Borders are drawn from the street rules alone (parishes.py, "streets" mode). Only a city that has both
-    // the "Обим" tab and geocoded churches keeps the older church-and-scope drawing.
+    // Borders are drawn from the street rules alone (territories.py, "streets" mode). Only a city that has both
+    // the "Обим" tab and geocoded capitals keeps the older capital-and-scope drawing.
     let drawing = null;
-    const hasChurches = data.places.some((p) => p.kind === 'church' && Number.isFinite(p.lat) && Number.isFinite(p.lng));
-    if (data.parishes.length === 0) {
-      console.warn(`! ${c.id}: нема парохија у листу „Парохије“; границе се не цртају.`);
+    const hasCapitals = data.places.some((p) => p.kind === 'capital' && Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    if (data.territories.length === 0) {
+      console.warn(`! ${tr('build.noTerritories', { city: c.id, tab: TERRITORIES_TAB })}`);
     } else if (!existsSync(`data-pipeline/cache/${c.id}/network.json`)) {
-      console.warn(`! ${c.id}: нема уличне мреже; парохије се не цртају `
-        + `(покрените: python data-pipeline/parishes.py --city ${c.id} --refresh и комитујте network.json).`);
-    } else if (scopeRaw !== null && hasChurches) {
-      drawing = buildParishesInput(data, scopeRaw).input;
+      console.warn(`! ${tr('build.noNetwork', { city: c.id })}`);
+    } else if (scopeRaw !== null && hasCapitals) {
+      drawing = buildTerritoriesInput(data, scopeRaw).input;
     } else {
       drawing = buildRulesInput(data);
     }
-    const boundaries = parseBoundaries(boundsRaw, new Set(data.parishes.map((t) => t.id)));
+    const boundaries = parseBoundaries(boundsRaw, new Set(data.territories.map((t) => t.id)));
 
     if (drawing) {
-      const geoOut = `${OUT_DIR}/${c.id}.parishes.geojson`;
-      const geoPrevious = `${PREVIOUS_DIR}/${c.id}.parishes.geojson`;
+      const geoOut = `${OUT_DIR}/${c.id}.territories.geojson`;
+      const geoPrevious = `${PREVIOUS_DIR}/${c.id}.territories.geojson`;
       const print = fingerprint(
         key.private_key,
-        { city: c.id, tables: { rules: rulesRaw, parishes: parishesRaw, places: placesRaw, scope: scopeRaw, bounds: boundsRaw } },
+        { city: c.id, tables: { rules: rulesRaw, territories: territoriesRaw, places: placesRaw, scope: scopeRaw, bounds: boundsRaw } },
         [
           `data-pipeline/cache/${c.id}/network.json`,
           `data-pipeline/cache/${c.id}/geocode-cache.json`,
           `data-pipeline/cache/${c.id}/streets.json`,
-          'data-pipeline/parishes.py',
-          'data-pipeline/lib/parishes-input.mjs',
+          'data-pipeline/territories.py',
+          'data-pipeline/lib/territories-input.mjs',
         ],
       );
       if (previousState[c.id]?.fingerprint === print && existsSync(geoPrevious)) {
         copyFileSync(geoPrevious, geoOut);
-        console.log(`✔ ${c.id}: улаз за границе је непромењен, узете границе из претходног деплоја (parishes.py прескочен)`);
+        console.log(`✔ ${c.id}: улаз за границе је непромењен, узете границе из претходног деплоја (territories.py прескочен)`);
       } else {
-        writeParishesInput(c.id, drawing);
+        writeTerritoriesInput(c.id, drawing);
         const hand = writeBoundaries(c.id, boundaries);
         if (hand) console.log(`✔ ${c.id}: ручних граница из листа „Границе“: ${hand}`);
-        const run = spawnSync(python, ['data-pipeline/parishes.py', '--city', c.id], {
+        const run = spawnSync(python, ['data-pipeline/territories.py', '--city', c.id], {
           stdio: 'inherit',
           env: { ...process.env, PYTHONUTF8: '1' },
         });
@@ -235,7 +234,7 @@ for (const c of cities) {
         }
         if (run.status !== 0) {
           rmSync(geoOut, { force: true });
-          throw new Error(`цртање парохија није успело (излаз ${run.status}), погледајте поруку изнад.`);
+          throw new Error(tr('build.drawFailed', { status: run.status }));
         }
       }
       state[c.id] = { fingerprint: print };

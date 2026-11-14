@@ -8,13 +8,14 @@
 // and formulas" switched OFF (ids such as 01 and the ажурирано date must stay text). Name every tab exactly like
 // the file. See README, "Пренос са Sheet-ова по граду".
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { activeProfile } from '../profiles/load.mjs';
 import { fetchModifiedDate, fetchSheet, getAccessToken, parseCredentials, DRIVE_METADATA_SCOPE, SHEETS_SCOPE } from '../data-pipeline/lib/sheets.mjs';
 
 const OUT = 'data-pipeline/work/migration';
-// Tab names of the old per-city Sheets; the first one is called "Парохије" in the central Sheet (#1).
-const TABS = ['Територије', 'Правила', 'Тачке', 'Обим', 'Границе'];
-const CENTRAL_TITLE = { 'Територије': 'Парохије' };
-const centralTitle = (title) => CENTRAL_TITLE[title] ?? title;
+// The per-city Sheets always called the tab "Територије"; in the central Sheet it has the name of the profile.
+const SOURCE_TERRITORIES_TAB = 'Територије';
+const TABS = [SOURCE_TERRITORIES_TAB, 'Правила', 'Тачке', 'Обим', 'Границе'];
+const centralTitle = (title) => (title === SOURCE_TERRITORIES_TAB ? activeProfile().sheet.territoriesTab : title);
 
 const csvCell = (v) => {
   const s = String(v ?? '');
@@ -53,7 +54,7 @@ const cityRows = [['ид', 'назив', 'place', 'насеља', 'reportEmail',
 
 for (const c of cities) {
   for (const title of TABS) {
-    const raw = await fetchSheet(token, c.sheetId, title, { optional: title !== 'Територије' && title !== 'Правила' });
+    const raw = await fetchSheet(token, c.sheetId, title, { optional: title !== SOURCE_TERRITORIES_TAB && title !== 'Правила' });
     if (raw === null) continue;
     const [header = [], ...body] = raw;
     merged[title] ??= [['град', ...header]];
