@@ -1,0 +1,102 @@
+name: Sync from template
+
+# Weekly and on demand: merges main of the template (RSvlad/karta-teritorija) into a branch of this repository
+# and opens a pull request, which runs the normal CI (typecheck, unit tests including the profile check, e2e,
+# Lighthouse) and is merged by hand.
+#
+# This repository is a standalone app ("Мој парох") and has its own identity: README.md, profiles/ACTIVE, the
+# package name, the vocabulary profiles/paroh/ and the default profile "paroh" (profiles/load.mjs, data-pipeline/vocab.py). The merge never
+# takes those from the template: README.md, profiles/ACTIVE and profiles/paroh/ are pinned to this repository's version after the
+# merge (OWNED_FILES), the words the template's tests spell out are replaced by this app's words
+# (profiles/adapt-template-tests.mjs), and the identity check fails the job if anything else moved the app back to another
+# vocabulary. Every other file merges line by line; a real conflict fails the job and lists the files.
+# If the template added a text, `npm test` fails until profiles/paroh/profile.json has the words for it.
+#
+# Needs the secret SYNC_TOKEN: a fine-grained token for this repository with Contents, Pull requests and Workflows
+# (read and write). The built-in GITHUB_TOKEN cannot change workflow files and does not start CI on the new PR.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_REPO: RSvlad/karta-teritorija
+  UPSTREAM_BRANCH: main
+  OWNED_FILES: README.md profiles/ACTIVE profiles/paroh
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the token
+        run: |
+          if [ -z "$SYNC_TOKEN" ]; then
+            echo "::error::Secret SYNC_TOKEN is not set (see the comment at the top of this workflow)."
+            exit 1
+          fi
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Merge the template
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config merge.ours.driver true   # OWNED_FILES stay this repository's own (.gitattributes)
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
+            echo "Already up to date with the template."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base_sha="$(git rev-parse HEAD)"
+          branch="sync/upstream-$(date +%Y%m%d)"
+          git switch -c "$branch"
+          if ! git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            echo "::error::Merge conflict: this repository changed a file that belongs to the template. Conflicting files:"
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+          # Files this repository owns stay exactly as on main, even if the template changed them and we did not.
+          git checkout "$base_sha" -- $OWNED_FILES
+          if ! git diff --cached --quiet; then
+            git commit -m "Keep the files this repository owns ($OWNED_FILES)"
+          fi
+          # The template's tests spell out its own words; make the ones the merge changed expect this app's words
+          # (profiles/paroh/profile.json itself is never touched).
+          tests="$(git diff --name-only "$base_sha" HEAD -- '*.test.ts' '*.test.mjs' 'e2e/*.ts')"
+          if [ -n "$tests" ]; then
+            node profiles/adapt-template-tests.mjs $tests
+            git add -A $tests
+            if ! git diff --cached --quiet; then
+              git commit -m "Use this app's words in the tests changed by the template"
+            fi
+          fi
+          # Identity check: the merge must not have moved the app back to the template's vocabulary.
+          fail=0
+          [ "$(tr -d '[:space:]' < profiles/ACTIVE)" = "paroh" ] || { echo "::error::profiles/ACTIVE is not paroh"; fail=1; }
+          grep -q '"name": "moj-paroh"' package.json || { echo "::error::package.json name is not moj-paroh"; fail=1; }
+          grep -q "DEFAULT_PROFILE = 'paroh'" profiles/load.mjs || { echo "::error::profiles/load.mjs DEFAULT_PROFILE is not paroh"; fail=1; }
+          grep -q 'DEFAULT_PROFILE = "paroh"' data-pipeline/vocab.py || { echo "::error::data-pipeline/vocab.py DEFAULT_PROFILE is not paroh"; fail=1; }
+          [ "$fail" = 0 ] || exit 1
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          git push origin "${{ steps.merge.outputs.branch }}"
+          gh pr create --base main --head "${{ steps.merge.outputs.branch }}" \
+            --title "Sync from template ($(date +%Y-%m-%d))" \
+            --body "Merge of ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}. If the unit tests fail with a missing text, add it to profiles/paroh/profile.json (README.md, \"Ажурирање из шаблона\")."
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}

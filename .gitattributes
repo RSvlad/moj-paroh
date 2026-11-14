@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Files that belong to this standalone app, not to the template (keep in sync with OWNED_FILES in
+# .github/workflows/sync-upstream.yml). On a merge from the template they stay as they are here.
+README.md merge=ours
+profiles/ACTIVE merge=ours
