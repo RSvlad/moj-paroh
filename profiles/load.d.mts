@@ -1,4 +1,4 @@
-import type reference from './teritorije/profile.json';
+import type reference from './paroh/profile.json';
 
 export type Profile = typeof reference;
 export type TextKey = keyof Profile['text'];

@@ -88,7 +88,7 @@ mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: in
 .swatch { display: inline-block; flex: none; width: .95rem; height: .95rem; margin-right: .55rem; border-radius: 50%; vertical-align: -1px; }
 .card h2 .swatch { width: .4rem; height: auto; align-self: stretch; margin: 0; border-radius: 4px; }
 .warn { padding: .6rem .85rem; background: var(--warn-bg); color: var(--warn-fg); border-radius: 12px; }
-/* Capital (meeting place) of the result card; the star is decoration, the word "Престоница" carries the meaning. */
+/* Capital (meeting place) of the result card; the star is decoration, the words "Парохијски храм" carry the meaning. */
 .capital { margin-top: 1.1rem; padding: .85rem 1rem 1rem; background: color-mix(in srgb, var(--accent) 7%, var(--card)); border-radius: 16px; }
 .capital .actions { margin-top: .7rem; }
 .capital p { margin: .15rem 0; }

@@ -1,5 +1,2 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-
-# README of this instance is its own (see README.md: "Шта се мења у овом репозиторијуму").
-README.md merge=ours

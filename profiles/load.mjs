@@ -1,5 +1,5 @@
-// The active vocabulary profile: what the app, the Sheet and the build call a "territory" and its "capital".
-// Everything a deployment may word differently (UI texts, Sheet tab and column names, build messages) lives in
+// The active vocabulary profile: what the app, the Sheet and the build call a "parish" and its "parish church".
+// Everything that is worded for people (UI texts, Sheet tab and column names, build messages) lives in
 // profiles/<name>/profile.json; the code and the published data use one neutral internal vocabulary.
 // Used by vite.config.ts, the Node pipeline and the e2e tests; Python reads the same JSON (data-pipeline/vocab.py).
 //
@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const PROFILES_DIR = dirname(fileURLToPath(import.meta.url));
-export const DEFAULT_PROFILE = 'teritorije';
+export const DEFAULT_PROFILE = 'paroh';
 
 export function activeProfileName() {
   const fromEnv = process.env.APP_PROFILE?.trim();

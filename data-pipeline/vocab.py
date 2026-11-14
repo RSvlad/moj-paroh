@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PROFILES_DIR = ROOT / "profiles"
-DEFAULT_PROFILE = "teritorije"
+DEFAULT_PROFILE = "paroh"
 
 
 def profile_name() -> str:

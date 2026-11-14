@@ -1,9 +1,9 @@
-// Transition: until the first deploy of the template-based code, the live site publishes data in the vocabulary
+// Transition: until the first deploy of the current code, the live site publishes data in the vocabulary
 // of the former fork ("parishes", `parishId`, place kind "church", borders in <city>.parishes.geojson), and
 // before that in the oldest one ("territories", already the current shape). restore-previous.mjs uses this to
 // keep a city whose Sheet data is broken at its previous version.
 //
-// DELETE this file after the first successful deploy of the template-based code: the live data is then current.
+// DELETE this file after the first successful deploy of the current code: the live data is then current.
 
 const renameKey = (obj, from, to) => {
   if (!obj || !(from in obj)) return obj;

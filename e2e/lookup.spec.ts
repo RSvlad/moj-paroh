@@ -36,7 +36,7 @@ test.describe('претрага', () => {
     await expect(card).toContainText(territoryHeading('15'));
   });
 
-  test('улица која није подељена даје своју територију', async ({ page }) => {
+  test('улица која није подељена даје своју парохију', async ({ page }) => {
     const card = await lookup(page, 'Железничка');
     await expect(card).toContainText(territoryHeading('15'));
     await expect(card).not.toContainText('подељена');

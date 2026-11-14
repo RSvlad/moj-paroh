@@ -4,8 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { checkProfile, DEFAULT_PROFILE, format, listProfiles, loadProfile, PROFILES_DIR } from './load.mjs';
 
 // Every profile of the repository must word every text of the default profile (nothing falls back to another
-// vocabulary) and keep its {placeholders}. When the template gains a text, a deployment's profile fails here
-// until it has its own wording for it: the merge from the template cannot silently show the wrong words.
+// vocabulary) and keep its {placeholders}. A text added to the default profile must be worded in every other one.
 describe('профили', () => {
   for (const name of listProfiles()) {
     it(`„${name}“ је исправан`, () => {
@@ -28,11 +27,11 @@ describe('профили', () => {
 
   it('забрањени корен у приказаном тексту се одбија', () => {
     const base = loadProfile(DEFAULT_PROFILE);
-    expect(checkProfile({ ...base, forbidden: ['територ'] }).some((p) => p.startsWith('забрањени корен'))).toBe(true);
+    expect(checkProfile({ ...base, forbidden: ['парох'] }).some((p) => p.startsWith('забрањени корен'))).toBe(true);
   });
 
   it('format попуњава поља, а поље које недостаје је грешка', () => {
-    expect(format('Територија {id} „{name}“', { id: 14, name: 'Либерти' })).toBe('Територија 14 „Либерти“');
+    expect(format('Парохија {id} „{name}“', { id: 1, name: 'Прва Саборна' })).toBe('Парохија 1 „Прва Саборна“');
     expect(() => format('{id}', {})).toThrow();
   });
 

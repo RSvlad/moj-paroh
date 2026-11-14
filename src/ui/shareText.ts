@@ -2,7 +2,7 @@ import { coversAllNumbers, formatHouseNumber, formatRange } from '../resolver';
 import type { Assignment, Place, Resolution } from '../resolver';
 import { tr } from '../profile';
 
-/** "★ Престоница: назив, адреса"; the territory is named only when the card spans several. */
+/** "★ Парохијски храм: назив, адреса"; the territory is named only when the card spans several. */
 export function capitalText(p: Place, withTerritory: boolean): string {
   return `★ ${withTerritory ? tr('capital.labelFor', { id: p.territoryId }) : tr('capital.label')}: ${p.name}, ${p.address}`;
 }

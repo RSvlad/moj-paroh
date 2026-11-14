@@ -1,9 +1,9 @@
-import type reference from '../../profiles/teritorije/profile.json';
+import type reference from '../../profiles/paroh/profile.json';
 
-// What the deployment calls a "territory" and its "capital" (UI texts, app name): profiles/<name>/profile.json.
-// The code itself always says territory/capital; only the words people read come from the profile.
+// The words people read (UI texts, app name): profiles/paroh/profile.json ("парохија", "парохијски храм").
+// The code itself says territory/capital internally; the published data uses the same neutral names.
 
-/** Shape of every profile; profiles/teritorije/profile.json is the reference (see profiles/README.md). */
+/** Shape of every profile; profiles/paroh/profile.json is the reference (see profiles/README.md). */
 export type Profile = typeof reference;
 export type TextKey = keyof Profile['text'];
 
