@@ -59,7 +59,8 @@ jobs:
             exit 0
           fi
           base_sha="$(git rev-parse HEAD)"
-          branch="sync/upstream-$(date +%Y%m%d)"
+          # one branch per template commit: a second run on the same day must not reuse the branch of a merged PR
+          branch="sync/upstream-$(date +%Y%m%d)-$(git rev-parse --short "upstream/${UPSTREAM_BRANCH}")"
           git switch -c "$branch"
           if ! git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
             echo "::error::Merge conflict: this repository changed a file that belongs to the template. Conflicting files:"
@@ -95,8 +96,16 @@ jobs:
         if: steps.merge.outputs.changed == 'true'
         run: |
           git push origin "${{ steps.merge.outputs.branch }}"
-          gh pr create --base main --head "${{ steps.merge.outputs.branch }}" \
-            --title "Sync from template ($(date +%Y-%m-%d))" \
-            --body "Merge of ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}. If the unit tests fail with a missing text, add it to profiles/paroh/profile.json (README.md, \"Ажурирање из шаблона\")."
+          # GitHub may not see a fresh push for a moment ("Head sha can't be blank"): retry a few times.
+          for attempt in 1 2 3 4 5; do
+            if gh pr create --base main --head "${{ steps.merge.outputs.branch }}" \
+              --title "Sync from template ($(date +%Y-%m-%d))" \
+              --body "Merge of ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}. If the unit tests fail with a missing text, add it to profiles/paroh/profile.json (README.md, \"Ажурирање из шаблона\")."; then
+              exit 0
+            fi
+            echo "Attempt $attempt failed, retrying in 15 s"
+            sleep 15
+          done
+          exit 1
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
