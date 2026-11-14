@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { coversAllNumbers, createResolver, DataError, formatHouseNumber, formatRange, parseHouseNumber } from '../resolver';
-import type { Assignment, CityData, HouseNumber, Place, Resolution, Resolver, Street, ParishStreet } from '../resolver';
+import type { Assignment, CityData, HouseNumber, Place, Resolution, Resolver, Street, TerritoryStreet } from '../resolver';
 import { createSearch, hitId, hitName } from '../search/search';
+import { profile, tr } from '../profile';
 import type { Hit } from '../search/search';
 import { highlightParts } from '../search/highlight';
 import { normalizeText } from '../search/normalize';
 import { daysLabel, staleAgeDays } from './freshness';
-import { churchText, resultText } from './shareText';
+import { capitalText, resultText } from './shareText';
 import { formatDistance, nearest } from '../geo/geo';
 import { PrintMaps, preparePrintMaps } from './PrintMap';
 import { useRoute } from './route';
@@ -18,7 +19,7 @@ import type { MapFocus, MapSelection } from './MapView';
 
 const CITY_KEY = 'moj-paroh:city';
 
-/** "Прикажи на мапи" on a result card: the churches to frame, and the one the user asked about (selected). */
+/** "Прикажи на мапи" on a result card: the capitals to frame, and the one the user asked about (selected). */
 interface MapRequest extends MapFocus {
   cityId: string;
   selected: string;
@@ -131,7 +132,7 @@ function Cities({ cities }: { cities: CityRef[] }) {
   return (
     <main>
       <header class="top">
-        <h1>Парохије · {current.name}</h1>
+        <h1>{profile.app.title} · {current.name}</h1>
         <Prefs />
       </header>
       {!online && <p class="warn" role="status">Нисте на мрежи. Приказују се подаци сачувани на уређају.</p>}
@@ -332,8 +333,8 @@ function Search({ cityId, data, resolver, route, go }: SearchProps) {
             >
               <span>
                 {/* The icon is decoration; the kind is also spoken and, for places, the address is shown. */}
-                <span class="kind" aria-hidden="true">{h.kind === 'street' ? '🛣️' : h.place.kind === 'church' ? '★' : '📍'}</span>
-                <span class="sr-only">{h.kind === 'street' ? 'Улица: ' : h.place.kind === 'church' ? 'Парохијски храм: ' : 'Тачка: '}</span>
+                <span class="kind" aria-hidden="true">{h.kind === 'street' ? '🛣️' : h.place.kind === 'capital' ? '★' : '📍'}</span>
+                <span class="sr-only">{h.kind === 'street' ? 'Улица: ' : h.place.kind === 'capital' ? `${tr('capital.label')}: ` : 'Тачка: '}</span>
                 <Highlight text={hitName(h)} query={query} />
                 {h.kind === 'street' && h.street.settlement && <span class="muted"> · {h.street.settlement}</span>}
                 {h.kind === 'place' && <span class="muted"> · {h.place.address}</span>}
@@ -371,10 +372,10 @@ function Search({ cityId, data, resolver, route, go }: SearchProps) {
             cityId={cityId}
             reportEmail={data.reportEmail}
             updated={data.updated}
-            onShowOnMap={(church, all) =>
+            onShowOnMap={(capital, all) =>
               setMapRequest((prev) => ({
                 cityId,
-                selected: church.id,
+                selected: capital.id,
                 placeIds: all.filter(hasPoint).map((p) => p.id),
                 seq: (prev?.seq ?? 0) + 1,
               }))
@@ -382,8 +383,8 @@ function Search({ cityId, data, resolver, route, go }: SearchProps) {
           />
         ) : null}
       </section>
-      {/* A city that only has its streets (no parishes yet) has nothing to draw or locate. */}
-      {resolver.parishes.size > 0 && (
+      {/* A city that only has its streets (no territories yet) has nothing to draw or locate. */}
+      {resolver.territories.size > 0 && (
         <MapSection key={cityId} cityId={cityId} data={data} resolver={resolver} request={mapRequest} />
       )}
       <footer class="muted">Ажурирано: {data.updated}</footer>
@@ -400,12 +401,12 @@ function PeopleLine({ a }: { a: Assignment }) {
   );
 }
 
-function ParishHeading({ a }: { a: Assignment }) {
+function TerritoryHeading({ a }: { a: Assignment }) {
   // Colour is always paired with the name, never alone.
   return (
     <h2>
-      <span class="swatch" style={{ background: a.parish.color }} aria-hidden="true" />
-      Парохија {a.parish.id} „{a.parish.name}“
+      <span class="swatch" style={{ background: a.territory.color }} aria-hidden="true" />
+      {tr('territory.heading', { id: a.territory.id, name: a.territory.name })}
     </h2>
   );
 }
@@ -461,27 +462,27 @@ function assignmentsOf(result: Resolution): Assignment[] {
     : [];
 }
 
-/** Distinct parishes of a resolution, in the order they are shown. */
-function parishIdsOf(result: Resolution): string[] {
-  return [...new Set(assignmentsOf(result).map((a) => a.parish.id))];
+/** Distinct territories of a resolution, in the order they are shown. */
+function territoryIdsOf(result: Resolution): string[] {
+  return [...new Set(assignmentsOf(result).map((a) => a.territory.id))];
 }
 
-/** Churches of the parishes of a resolution, one per parish that has one. */
-function churchesOf(result: Resolution, resolver: Resolver): Place[] {
-  const churches = new Map<string, Place>();
+/** Capitals of the territories of a resolution, one per territory that has one. */
+function capitalsOf(result: Resolution, resolver: Resolver): Place[] {
+  const capitals = new Map<string, Place>();
   for (const a of assignmentsOf(result)) {
-    const church = resolver.churchOf(a.parish.id);
-    if (church) churches.set(church.id, church);
+    const capital = resolver.capitalOf(a.territory.id);
+    if (capital) capitals.set(capital.id, capital);
   }
-  return [...churches.values()];
+  return [...capitals.values()];
 }
 
-function ChurchLine({ place, withParish, onShowOnMap }: { place: Place; withParish: boolean; onShowOnMap?: () => void }) {
+function CapitalLine({ place, withTerritory, onShowOnMap }: { place: Place; withTerritory: boolean; onShowOnMap?: () => void }) {
   return (
-    <div class="church">
+    <div class="capital">
       <p>
         <span aria-hidden="true">★ </span>
-        Парохијски храм{withParish ? ` (парохија ${place.parishId})` : ''}: <strong>{place.name}</strong>, {place.address}
+        {withTerritory ? tr('capital.labelFor', { id: place.territoryId }) : tr('capital.label')}: <strong>{place.name}</strong>, {place.address}
       </p>
       {place.note && <p class="muted">{place.note}</p>}
       <PlaceLinks place={place} onShowOnMap={onShowOnMap} />
@@ -501,13 +502,13 @@ function StaleWarning({ updated }: { updated: string }) {
 }
 
 function PlaceCard({ place, resolver, city, cityId, updated }: { place: Place; resolver: Resolver; city: string; cityId: string; updated: string }) {
-  const parish = resolver.parishes.get(place.parishId)!;
+  const territory = resolver.territories.get(place.territoryId)!;
   const title = `${place.name} · ${city}`;
-  const kind = place.kind === 'church' ? 'Парохијски храм' : place.kind === 'collector' ? 'Сабирна тачка' : 'Тачка';
+  const kind = place.kind === 'capital' ? tr('capital.label') : place.kind === 'collector' ? 'Сабирна тачка' : 'Тачка';
   const text = [
     title,
     `${kind}: ${place.address}`,
-    `Парохија ${parish.id} „${parish.name}“: ${parish.defaults.primary}`,
+    `${tr('territory.heading', { id: territory.id, name: territory.name })}: ${territory.defaults.primary}`,
     ...(place.note ? [place.note] : []),
   ].join('\n');
   return (
@@ -515,49 +516,49 @@ function PlaceCard({ place, resolver, city, cityId, updated }: { place: Place; r
       <h2 class="card-title">{title}</h2>
       <StaleWarning updated={updated} />
       <p>
-        <span aria-hidden="true">{place.kind === 'church' ? '★ ' : '📍 '}</span>
+        <span aria-hidden="true">{place.kind === 'capital' ? '★ ' : '📍 '}</span>
         {kind}: {place.address}
       </p>
       {place.note && <p class="muted">{place.note}</p>}
       <h2>
-        <span class="swatch" style={{ background: parish.color }} aria-hidden="true" />
-        Парохија {parish.id} „{parish.name}“
+        <span class="swatch" style={{ background: territory.color }} aria-hidden="true" />
+        {tr('territory.heading', { id: territory.id, name: territory.name })}
       </h2>
-      <p><strong>{parish.defaults.primary}</strong></p>
+      <p><strong>{territory.defaults.primary}</strong></p>
       <PlaceLinks place={place} />
-      <PrintMaps cityId={cityId} parishIds={[parish.id]} resolver={resolver} />
+      <PrintMaps cityId={cityId} territoryIds={[territory.id]} resolver={resolver} />
       <p class="print-only">Ажурирано: {updated}</p>
       <ShareBar key={text} title={title} text={text} />
     </article>
   );
 }
 
-/** Card of a parish picked on the map: who is responsible, the church and the other points. */
-function ParishCard({ parishId, resolver, city, cityId, updated }: { parishId: string; resolver: Resolver; city: string; cityId: string; updated: string }) {
-  const parish = resolver.parishes.get(parishId);
-  if (!parish) return null;
-  const church = resolver.churchOf(parish.id);
-  const points = resolver.places.filter((p) => p.parishId === parish.id && p.kind !== 'church');
-  const streets = resolver.streetsOf(parish.id);
-  const title = `Парохија ${parish.id} „${parish.name}“ · ${city}`;
-  const people = parish.defaults.deputy
-    ? `${parish.defaults.primary} (заменик: ${parish.defaults.deputy})`
-    : parish.defaults.primary;
+/** Card of a territory picked on the map: who is responsible, the capital and the other points. */
+function TerritoryCard({ territoryId, resolver, city, cityId, updated }: { territoryId: string; resolver: Resolver; city: string; cityId: string; updated: string }) {
+  const territory = resolver.territories.get(territoryId);
+  if (!territory) return null;
+  const capital = resolver.capitalOf(territory.id);
+  const points = resolver.places.filter((p) => p.territoryId === territory.id && p.kind !== 'capital');
+  const streets = resolver.streetsOf(territory.id);
+  const title = `${tr('territory.heading', { id: territory.id, name: territory.name })} · ${city}`;
+  const people = territory.defaults.deputy
+    ? `${territory.defaults.primary} (заменик: ${territory.defaults.deputy})`
+    : territory.defaults.primary;
   const text = [
     title,
     people,
-    ...(church ? [churchText(church, false)] : []),
+    ...(capital ? [capitalText(capital, false)] : []),
     ...points.map((p) => `📍 ${p.name}, ${p.address}`),
   ].join('\n');
   return (
     <article class="card">
       <h2 class="card-title">
-        <span class="swatch" style={{ background: parish.color }} aria-hidden="true" />
+        <span class="swatch" style={{ background: territory.color }} aria-hidden="true" />
         {title}
       </h2>
       <StaleWarning updated={updated} />
-      <p><strong>{parish.defaults.primary}</strong>{parish.defaults.deputy && <span class="muted"> · заменик: {parish.defaults.deputy}</span>}</p>
-      {church && <ChurchLine place={church} withParish={false} />}
+      <p><strong>{territory.defaults.primary}</strong>{territory.defaults.deputy && <span class="muted"> · заменик: {territory.defaults.deputy}</span>}</p>
+      {capital && <CapitalLine place={capital} withTerritory={false} />}
       {points.length > 0 && (
         <>
           <h2>Тачке</h2>
@@ -570,19 +571,19 @@ function ParishCard({ parishId, resolver, city, cityId, updated }: { parishId: s
         <>
           <h2>Улице</h2>
           <ul class={`plain street-list${streets.length > 30 ? ' dense' : ''}`}>
-            {streets.map((s) => <li key={s.street.id}><ParishStreetLine item={s} city={city} /></li>)}
+            {streets.map((s) => <li key={s.street.id}><TerritoryStreetLine item={s} city={city} /></li>)}
           </ul>
         </>
       )}
-      <PrintMaps cityId={cityId} parishIds={[parish.id]} resolver={resolver} />
+      <PrintMaps cityId={cityId} territoryIds={[territory.id]} resolver={resolver} />
       <p class="print-only">Ажурирано: {updated}</p>
       <ShareBar key={text} title={title} text={text} />
     </article>
   );
 }
 
-/** One street of a parish card: the name, then the number ranges the parish owns (none = the whole street). */
-function ParishStreetLine({ item, city }: { item: ParishStreet; city: string }) {
+/** One street of a territory card: the name, then the number ranges the territory owns (none = the whole street). */
+function TerritoryStreetLine({ item, city }: { item: TerritoryStreet; city: string }) {
   const { street, segments, rest } = item;
   const parts = [
     ...segments.map((r) => `${formatRange(r)}${r.assignee ? ` (${r.assignee})` : ''}`),
@@ -633,17 +634,17 @@ function locateErrorText(e: GeolocationPositionError): string {
   return 'Локација тренутно није доступна. Проверите да ли је GPS укључен.';
 }
 
-function NearestChurch({ place, meters, resolver }: { place: Place; meters: number; resolver: Resolver }) {
-  const parish = resolver.parishes.get(place.parishId);
+function NearestCapital({ place, meters, resolver }: { place: Place; meters: number; resolver: Resolver }) {
+  const territory = resolver.territories.get(place.territoryId);
   return (
     <article class="card">
-      <h2 class="card-title">Најближи парохијски храм</h2>
+      <h2 class="card-title">{tr('capital.nearest')}</h2>
       <p>
         <span aria-hidden="true">★ </span>
         <strong>{place.name}</strong>, {place.address}
       </p>
       <p class="muted">
-        {formatDistance(meters)} ваздушном линијом{parish ? ` · парохија ${parish.id} „${parish.name}“` : ''}
+        {formatDistance(meters)} ваздушном линијом{territory ? ` · ${tr('territory.inlineNamed', { id: territory.id, name: territory.name })}` : ''}
       </p>
       <PlaceLinks place={place} />
     </article>
@@ -651,11 +652,11 @@ function NearestChurch({ place, meters, resolver }: { place: Place; meters: numb
 }
 
 /**
- * Map of the city's parishes. MapLibre is a separate chunk that is fetched only when the map is opened,
- * so the search page stays small. The parishes are also listed as buttons: the map canvas is not keyboard-friendly.
+ * Map of the city's territories. MapLibre is a separate chunk that is fetched only when the map is opened,
+ * so the search page stays small. The territories are also listed as buttons: the map canvas is not keyboard-friendly.
  * A click on the map opens the same cards as the search (bottom sheet on a phone, side panel on a desktop).
- * Filters (parish, assignee, "mine") narrow what the map and the list show; "Where am I?" asks the browser for
- * the GPS position once, finds the parish containing it and the nearest church, and keeps nothing.
+ * Filters (territory, assignee, "mine") narrow what the map and the list show; "Where am I?" asks the browser for
+ * the GPS position once, finds the territory containing it and the nearest capital, and keeps nothing.
  */
 function MapSection({ cityId, data, resolver, request }: {
   cityId: string; data: CityData; resolver: Resolver; request: MapRequest | null;
@@ -666,12 +667,12 @@ function MapSection({ cityId, data, resolver, request }: {
   const [selected, setSelected] = useState<MapSelection | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [showPoints, setShowPoints] = useState(true);
-  const [parishFilter, setParishFilter] = useState('');
+  const [territoryFilter, setTerritoryFilter] = useState('');
   const [assignee, setAssignee] = useState('');
   const [me, setMe] = useState<string | null>(() => readMe(cityId));
   const [onlyMine, setOnlyMine] = useState(false);
   const [fix, setFix] = useState<Fix>({ state: 'idle' });
-  const [located, setLocated] = useState<{ parishId: string | null; polygons: boolean } | null>(null);
+  const [located, setLocated] = useState<{ territoryId: string | null; polygons: boolean } | null>(null);
   const locateRef = useRef<HTMLElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -687,13 +688,13 @@ function MapSection({ cityId, data, resolver, request }: {
     return () => { alive = false; };
   }, [open]);
 
-  const parishes = [...resolver.parishes.values()];
-  const hasPoints = resolver.places.some((p) => p.kind !== 'church');
+  const territories = [...resolver.territories.values()];
+  const hasPoints = resolver.places.some((p) => p.kind !== 'capital');
 
-  // Everybody named in the data (defaults and per-rule overrides), and the parishes each of them serves.
+  // Everybody named in the data (defaults and per-rule overrides), and the territories each of them serves.
   const people = useMemo(() => {
     const names = new Set<string>();
-    for (const t of resolver.parishes.values()) {
+    for (const t of resolver.territories.values()) {
       names.add(t.defaults.primary);
       if (t.defaults.deputy) names.add(t.defaults.deputy);
     }
@@ -701,45 +702,45 @@ function MapSection({ cityId, data, resolver, request }: {
     return [...names].sort((a, b) => a.localeCompare(b, 'sr'));
   }, [data, resolver]);
 
-  const parishesOf = (name: string): Set<string> => {
+  const territoriesOf = (name: string): Set<string> => {
     const ids = new Set<string>();
-    for (const t of resolver.parishes.values()) {
+    for (const t of resolver.territories.values()) {
       if (t.defaults.primary === name || t.defaults.deputy === name) ids.add(t.id);
     }
-    for (const r of data.rules) if (r.assignee === name) ids.add(r.parishId);
+    for (const r of data.rules) if (r.assignee === name) ids.add(r.territoryId);
     return ids;
   };
 
   // null = no filter is set (everything is shown).
   const visible = useMemo(() => {
     const sets: Set<string>[] = [];
-    if (parishFilter) sets.push(new Set([parishFilter]));
-    if (assignee) sets.push(parishesOf(assignee));
-    if (onlyMine && me) sets.push(parishesOf(me));
+    if (territoryFilter) sets.push(new Set([territoryFilter]));
+    if (assignee) sets.push(territoriesOf(assignee));
+    if (onlyMine && me) sets.push(territoriesOf(me));
     if (sets.length === 0) return null;
     return new Set([...sets[0]!].filter((id) => sets.every((s) => s.has(id))));
-  }, [parishFilter, assignee, onlyMine, me, data, resolver]);
+  }, [territoryFilter, assignee, onlyMine, me, data, resolver]);
 
   const place = selected?.kind === 'place' ? resolver.places.find((p) => p.id === selected.id) : undefined;
 
   // A selection that the filters hide would leave a card for something not on the map.
   useEffect(() => {
     if (!selected || !visible) return;
-    const id = selected.kind === 'parish' ? selected.id : place?.parishId;
+    const id = selected.kind === 'territory' ? selected.id : place?.territoryId;
     if (id && !visible.has(id)) setSelected(null);
   }, [visible]);
 
   const resetFilters = () => {
-    setParishFilter('');
+    setTerritoryFilter('');
     setAssignee('');
     setOnlyMine(false);
   };
 
-  // "Прикажи на мапи" on a result card: open the map, select that church (its card and parish are shown)
-  // and frame every church of the result. A filter that hides one of them is cleared.
+  // "Прикажи на мапи" on a result card: open the map, select that capital (its card and territory are shown)
+  // and frame every capital of the result. A filter that hides one of them is cleared.
   useEffect(() => {
     if (!request || request.cityId !== cityId) return;
-    const wanted = new Set(request.placeIds.map((id) => resolver.places.find((p) => p.id === id)?.parishId));
+    const wanted = new Set(request.placeIds.map((id) => resolver.places.find((p) => p.id === id)?.territoryId));
     if (visible && [...wanted].some((id) => id && !visible.has(id))) resetFilters();
     setOpen(true); // MapLibre loads lazily, while the section scrolls into view
     setSelected({ kind: 'place', id: request.selected });
@@ -765,7 +766,7 @@ function MapSection({ cityId, data, resolver, request }: {
       setFix({ state: 'error', message: 'Овај прегледач не подржава одређивање локације.' });
       return;
     }
-    setOpen(true); // the map is needed to find the parish; MapLibre loads while the browser asks for permission
+    setOpen(true); // the map is needed to find the territory; MapLibre loads while the browser asks for permission
     setSelected(null);
     setFocus(null);
     setLocated(null);
@@ -782,16 +783,16 @@ function MapSection({ cityId, data, resolver, request }: {
     setLocated(null);
   };
 
-  // Called by the map once it has looked for the parish containing the point.
-  const onLocated = (parishId: string | null, polygons: boolean) => {
-    setLocated({ parishId, polygons });
-    // The parish the user stands in must not be hidden by an old filter.
-    if (parishId && visible && !visible.has(parishId)) resetFilters();
+  // Called by the map once it has looked for the territory containing the point.
+  const onLocated = (territoryId: string | null, polygons: boolean) => {
+    setLocated({ territoryId, polygons });
+    // The territory the user stands in must not be hidden by an old filter.
+    if (territoryId && visible && !visible.has(territoryId)) resetFilters();
   };
 
   const point = fix.state === 'done' ? fix.point : null;
-  const nearestChurch = useMemo(
-    () => (point ? nearest(resolver.places.filter((p) => p.kind === 'church'), point) : null),
+  const nearestCapital = useMemo(
+    () => (point ? nearest(resolver.places.filter((p) => p.kind === 'capital'), point) : null),
     [point, resolver],
   );
 
@@ -799,10 +800,10 @@ function MapSection({ cityId, data, resolver, request }: {
     if (point) locateRef.current?.scrollIntoView({ block: 'nearest' });
   }, [point]);
 
-  const shown = visible ? parishes.filter((t) => visible.has(t.id)) : parishes;
+  const shown = visible ? territories.filter((t) => visible.has(t.id)) : territories;
 
   return (
-    <section class="map-section" aria-label="Мапа парохија" ref={sectionRef}>
+    <section class="map-section" aria-label={tr('territory.sectionAria')} ref={sectionRef}>
       <div class="map-actions">
         <button
           type="button"
@@ -821,13 +822,13 @@ function MapSection({ cityId, data, resolver, request }: {
       {fix.state === 'error' && <p class="error" role="alert">{fix.message}</p>}
       {open && (
         <div id="map-panel" class="map-panel">
-          {parishes.length > 1 && (
+          {territories.length > 1 && (
             <div class="map-filters">
               <label>
-                Парохија
-                <select value={parishFilter} onChange={(e) => setParishFilter(e.currentTarget.value)}>
+                {tr('territory.filterLabel')}
+                <select value={territoryFilter} onChange={(e) => setTerritoryFilter(e.currentTarget.value)}>
                   <option value="">Све</option>
-                  {parishes.map((t) => <option key={t.id} value={t.id}>{t.id} {t.name}</option>)}
+                  {territories.map((t) => <option key={t.id} value={t.id}>{t.id} {t.name}</option>)}
                 </select>
               </label>
               <label>
@@ -858,16 +859,16 @@ function MapSection({ cityId, data, resolver, request }: {
               </label>
             )}
             {shown.length === 0 ? (
-              <p class="muted" role="status">Нема парохија за изабране филтере.</p>
+              <p class="muted" role="status">{tr('territory.noMatch')}</p>
             ) : (
-              <ul class="plain parish-list" aria-label="Парохије">
+              <ul class="plain territory-list" aria-label={tr('territory.listAria')}>
                 {shown.map((t) => (
                   <li key={t.id}>
                     <button
                       type="button"
                       class="chip"
-                      aria-pressed={selected?.kind === 'parish' && selected.id === t.id}
-                      onClick={() => setSelected(selected?.kind === 'parish' && selected.id === t.id ? null : { kind: 'parish', id: t.id })}
+                      aria-pressed={selected?.kind === 'territory' && selected.id === t.id}
+                      onClick={() => setSelected(selected?.kind === 'territory' && selected.id === t.id ? null : { kind: 'territory', id: t.id })}
                     >
                       <span class="swatch" style={{ background: t.color }} aria-hidden="true" />
                       {t.id} {t.name}
@@ -902,7 +903,7 @@ function MapSection({ cityId, data, resolver, request }: {
                 {place ? (
                   <PlaceCard place={place} resolver={resolver} city={data.name} cityId={cityId} updated={data.updated} />
                 ) : (
-                  <ParishCard parishId={selected.id} resolver={resolver} city={data.name} cityId={cityId} updated={data.updated} />
+                  <TerritoryCard territoryId={selected.id} resolver={resolver} city={data.name} cityId={cityId} updated={data.updated} />
                 )}
               </aside>
             )}
@@ -911,22 +912,22 @@ function MapSection({ cityId, data, resolver, request }: {
       )}
       {point && (
         <section class="locate" ref={locateRef} aria-label="Ваша локација">
-          {located?.parishId ? (
+          {located?.territoryId ? (
             <>
-              <p role="status">Налазите се у парохији {located.parishId}.</p>
-              <ParishCard parishId={located.parishId} resolver={resolver} city={data.name} cityId={cityId} updated={data.updated} />
+              <p role="status">{tr('territory.youAreIn', { id: located.territoryId })}</p>
+              <TerritoryCard territoryId={located.territoryId} resolver={resolver} city={data.name} cityId={cityId} updated={data.updated} />
             </>
           ) : located?.polygons ? (
-            <p role="status">Налазите се ван свих парохија.</p>
+            <p role="status">{tr('territory.youAreOutside')}</p>
           ) : located || loadFailed ? (
-            <p class="warn" role="status">Парохију није могуће одредити: мапа са границама није доступна.</p>
+            <p class="warn" role="status">{tr('territory.cannotLocate')}</p>
           ) : (
-            <p class="muted" role="status">Одређивање парохије…</p>
+            <p class="muted" role="status">{tr('territory.locating')}</p>
           )}
-          {nearestChurch ? (
-            <NearestChurch place={nearestChurch.item} meters={nearestChurch.meters} resolver={resolver} />
+          {nearestCapital ? (
+            <NearestCapital place={nearestCapital.item} meters={nearestCapital.meters} resolver={resolver} />
           ) : (
-            <p class="muted">Најближи парохијски храм се не може одредити: ниједан нема координате.</p>
+            <p class="muted">{tr('capital.nearestUnknown')}</p>
           )}
           <p class="muted">Локација се користи само у овом прегледачу: не шаље се нигде и не чува се.</p>
           <button type="button" class="button secondary" onClick={clearLocation}>Уклони локацију</button>
@@ -948,7 +949,7 @@ async function copyText(text: string): Promise<boolean> {
 /**
  * Prints the card the button belongs to. The card is marked for the duration of the print dialog and the print
  * stylesheet hides everything else, so a card in the map panel prints as alone as one in the search results.
- * The basemaps under its parish maps are drawn first (a few seconds at most, only the first time); if they
+ * The basemaps under its territory maps are drawn first (a few seconds at most, only the first time); if they
  * cannot be, the card prints with the plain border drawings.
  */
 async function printCard(button: HTMLElement): Promise<void> {
@@ -1007,11 +1008,11 @@ function ShareBar({ title, text }: { title: string; text: string }) {
 
 function ResultCard({ result, resolver, city, cityId, reportEmail, updated, onShowOnMap }: {
   result: Resolution; resolver: Resolver; city: string; cityId: string; reportEmail?: string; updated: string;
-  /** Show a church on the map; the second argument is every church of the result (all get framed). */
-  onShowOnMap?: (church: Place, all: readonly Place[]) => void;
+  /** Show a capital on the map; the second argument is every capital of the result (all get framed). */
+  onShowOnMap?: (capital: Place, all: readonly Place[]) => void;
 }) {
   const title = `${result.street.name}${'house' in result && result.house ? ' ' + formatHouseNumber(result.house) : ''} · ${city}`;
-  const churches = churchesOf(result, resolver);
+  const capitals = capitalsOf(result, resolver);
   let body;
   switch (result.kind) {
     case 'rules':
@@ -1019,7 +1020,7 @@ function ResultCard({ result, resolver, city, cityId, reportEmail, updated, onSh
         <>
           {result.assignments.map((a, i) => (
             <div key={i}>
-              {(i === 0 || a.parish.id !== result.assignments[i - 1]!.parish.id) && <ParishHeading a={a} />}
+              {(i === 0 || a.territory.id !== result.assignments[i - 1]!.territory.id) && <TerritoryHeading a={a} />}
               <p><PeopleLine a={a} />{!coversAllNumbers(a.rule!) && <> <span class="muted">{formatRange(a.rule!)}</span></>}</p>
               {a.rule?.note && <p class="muted">{a.rule.note}</p>}
             </div>
@@ -1036,7 +1037,7 @@ function ResultCard({ result, resolver, city, cityId, reportEmail, updated, onSh
           <p class="muted">Улица је подељена по бројевима:</p>
           {result.segments.map((a, i) => (
             <div key={i}>
-              <ParishHeading a={a} />
+              <TerritoryHeading a={a} />
               <p><PeopleLine a={a} /> <span class="muted">{formatRange(a.rule!)}</span></p>
             </div>
           ))}
@@ -1046,17 +1047,17 @@ function ResultCard({ result, resolver, city, cityId, reportEmail, updated, onSh
     case 'inherited':
       body = (
         <>
-          <ParishHeading a={result.assignment} />
+          <TerritoryHeading a={result.assignment} />
           <p><PeopleLine a={result.assignment} /></p>
         </>
       );
       break;
     case 'unassigned': {
       const email = reportRecipient(reportEmail);
-      // A city without parishes has only its street list so far: nothing is assigned, so there is nothing to report.
-      const noParishes = resolver.parishes.size === 0;
-      body = noParishes ? (
-        <p>Парохије за овај град још нису унете.</p>
+      // A city without territories has only its street list so far: nothing is assigned, so there is nothing to report.
+      const noTerritories = resolver.territories.size === 0;
+      body = noTerritories ? (
+        <p>{tr('territory.noneYet')}</p>
       ) : (
         <>
           <p>Улица није додељена.</p>
@@ -1066,21 +1067,21 @@ function ResultCard({ result, resolver, city, cityId, reportEmail, updated, onSh
     }
   }
 
-  const text = resultText(result, title, churches);
+  const text = resultText(result, title, capitals);
   return (
     <article class="card">
       <h2 class="card-title">{title}</h2>
       <StaleWarning updated={updated} />
       {body}
-      {churches.map((p) => (
-        <ChurchLine
+      {capitals.map((p) => (
+        <CapitalLine
           key={p.id}
           place={p}
-          withParish={churches.length > 1}
-          onShowOnMap={onShowOnMap && (() => onShowOnMap(p, churches))}
+          withTerritory={capitals.length > 1}
+          onShowOnMap={onShowOnMap && (() => onShowOnMap(p, capitals))}
         />
       ))}
-      <PrintMaps cityId={cityId} parishIds={parishIdsOf(result)} resolver={resolver} />
+      <PrintMaps cityId={cityId} territoryIds={territoryIdsOf(result)} resolver={resolver} />
       {/* The page footer is hidden in print, so the date goes on the printed card itself. */}
       <p class="print-only">Ажурирано: {updated}</p>
       {/* key resets the "copied" note when the result changes. */}

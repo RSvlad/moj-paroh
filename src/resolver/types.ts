@@ -5,7 +5,7 @@ export interface People {
   deputy?: string;
 }
 
-export interface Parish {
+export interface Territory {
   id: string;
   name: string;
   color: string;
@@ -26,27 +26,27 @@ export interface Rule {
   from: number | null;
   to: number | null;
   parity: Parity;
-  parishId: string;
-  /** Overrides the parish's default people when set. */
+  territoryId: string;
+  /** Overrides the territory's default people when set. */
   assignee?: string;
   note?: string;
 }
 
-/** Street that lies inside a parish polygon (produced by the pipeline). */
+/** Street that lies inside a territory polygon (produced by the pipeline). */
 export interface InternalStreet {
   streetId: string;
-  parishId: string;
+  territoryId: string;
 }
 
-/** `church` = the parish's meeting place (exactly one per parish); the others are optional extras. */
-export type PlaceKind = 'church' | 'collector' | 'other';
+/** `capital` = the territory's meeting place (exactly one per territory); the others are optional extras. */
+export type PlaceKind = 'capital' | 'collector' | 'other';
 
-/** A named point of a parish. Never a private home address (see the Sheet template). */
+/** A named point of a territory. Never a private home address (see the Sheet template). */
 export interface Place {
   id: string;
   name: string;
   kind: PlaceKind;
-  parishId: string;
+  territoryId: string;
   address: string;
   /** Set by the pipeline from the geocode cache; absent when the address could not be geocoded. */
   lat?: number;
@@ -60,11 +60,11 @@ export interface CityData {
   updated: string;
   /** Recipient of "report unassigned street" emails. Falls back to VITE_REPORT_EMAIL; no button if neither is set. */
   reportEmail?: string;
-  parishes: Parish[];
+  territories: Territory[];
   streets: Street[];
   rules: Rule[];
   internal: InternalStreet[];
-  /** Churches and other points. Data built before #10 has none, so readers treat a missing value as []. */
+  /** Capitals and other points. Data built before #10 has none, so readers treat a missing value as []. */
   places: Place[];
 }
 
@@ -76,15 +76,15 @@ export interface HouseNumber {
   sub: number | null;
 }
 
-/** A street on a parish's card. No `segments` = the whole street; `rest` = also the numbers no rule covers. */
-export interface ParishStreet {
+/** A street on a territory's card. No `segments` = the whole street; `rest` = also the numbers no rule covers. */
+export interface TerritoryStreet {
   street: Street;
   segments: Rule[];
   rest: boolean;
 }
 
 export interface Assignment {
-  parish: Parish;
+  territory: Territory;
   people: People;
   rule?: Rule;
 }

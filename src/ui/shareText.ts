@@ -1,9 +1,10 @@
 import { coversAllNumbers, formatHouseNumber, formatRange } from '../resolver';
 import type { Assignment, Place, Resolution } from '../resolver';
+import { tr } from '../profile';
 
-/** "★ Парохијски храм: назив, адреса"; the parish is named only when the card spans several. */
-export function churchText(p: Place, withParish: boolean): string {
-  return `★ Парохијски храм${withParish ? ` (парохија ${p.parishId})` : ''}: ${p.name}, ${p.address}`;
+/** "★ Престоница: назив, адреса"; the territory is named only when the card spans several. */
+export function capitalText(p: Place, withTerritory: boolean): string {
+  return `★ ${withTerritory ? tr('capital.labelFor', { id: p.territoryId }) : tr('capital.label')}: ${p.name}, ${p.address}`;
 }
 
 function peopleText(a: Assignment): string {
@@ -16,17 +17,17 @@ function assigneeText(a: Assignment, withRange: boolean): string {
 }
 
 /**
- * Plain-text lines of assignments, for Copy and Share. A parish is named once for consecutive assignments
- * of the same parish (the on-screen card does the same); then each one follows on its own indented line.
+ * Plain-text lines of assignments, for Copy and Share. A territory is named once for consecutive assignments
+ * of the same territory (the on-screen card does the same); then each one follows on its own indented line.
  */
 function assignmentLines(assignments: Assignment[], withRange: boolean): string[] {
   const lines: string[] = [];
   for (let i = 0; i < assignments.length; ) {
-    const parish = assignments[i]!.parish;
+    const territory = assignments[i]!.territory;
     let end = i + 1;
-    while (end < assignments.length && assignments[end]!.parish.id === parish.id) end++;
+    while (end < assignments.length && assignments[end]!.territory.id === territory.id) end++;
     const group = assignments.slice(i, end);
-    const heading = `Парохија ${parish.id} „${parish.name}“:`;
+    const heading = `${tr('territory.heading', { id: territory.id, name: territory.name })}:`;
     if (group.length === 1) lines.push(`${heading} ${assigneeText(group[0]!, withRange)}`);
     else lines.push(heading, ...group.map((a) => `  ${assigneeText(a, withRange)}`));
     i = end;
@@ -39,7 +40,7 @@ function assignmentLines(assignments: Assignment[], withRange: boolean): string[
  * when it was entered; it stays where it tells assignments apart: a street split by number (`linear`) and a border
  * number with both assignments.
  */
-export function resultText(result: Resolution, title: string, churches: Place[]): string {
+export function resultText(result: Resolution, title: string, capitals: Place[]): string {
   const lines = [title];
   switch (result.kind) {
     case 'rules':
@@ -56,6 +57,6 @@ export function resultText(result: Resolution, title: string, churches: Place[])
       lines.push('Улица није додељена.');
       break;
   }
-  lines.push(...churches.map((p) => churchText(p, churches.length > 1)));
+  lines.push(...capitals.map((p) => capitalText(p, capitals.length > 1)));
   return lines.join('\n');
 }
