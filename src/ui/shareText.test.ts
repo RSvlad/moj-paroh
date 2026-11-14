@@ -20,7 +20,7 @@ describe('resultText', () => {
       kind: 'rules', street, house, border: false,
       assignments: [assignment('14', 'Либерти', undefined, rule(null, null))],
     };
-    expect(resultText(result, title, [])).toBe([title, 'Територија 14 „Либерти“'].join('\n'));
+    expect(resultText(result, title, [])).toBe([title, 'Парохија 14 „Либерти“'].join('\n'));
   });
 
   it('rules: omits the range when the number is entered', () => {
